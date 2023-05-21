@@ -1,2 +1,3 @@
-# portfolio
-personal website to show images
+# Portfolio website 
+
+This repo contains the code for my personal portfolio website
