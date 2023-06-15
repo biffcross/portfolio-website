@@ -1,9 +1,9 @@
 {
   "private": true,
-  "name": "jodie",
-  "description": "Image-heavy photography portfolio with colorful accents & customizable pages. Includes adaptive image grids powered by CSS grid and automatic image integration into projects.",
+  "name": "biff",
+  "description": "My online portfolio website.",
   "version": "0.1.8",
-  "author": "LekoArts",
+  "author": "@biffxcross",
   "license": "0BSD",
   "starter-name": "gatsby-starter-portfolio-jodie",
   "scripts": {
@@ -19,6 +19,7 @@
   "dependencies": {
     "@lekoarts/gatsby-theme-jodie": "^5.0.4",
     "gatsby": "^5.9.0",
+    "gatsby-plugin-instagram-embed": "^4.0.0",
     "gatsby-plugin-manifest": "^5.9.0",
     "gatsby-plugin-sitemap": "^6.9.0",
     "gatsby-plugin-webpack-statoscope": "^1.0.2",

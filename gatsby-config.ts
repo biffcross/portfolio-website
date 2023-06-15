@@ -12,7 +12,7 @@ const config: GatsbyConfig = {
     siteTitle: `Biff Cross`,
     siteTitleAlt: `Biff Cross Photography`,
     siteHeadline: `Photography by Biff Cross`,
-    siteUrl: `https://biffcross.github.io/portfolio`,
+    siteUrl: `https://biffcross.github.io/portfolio-website`,
     siteDescription: `Image-heavy photography portfolio with colorful accents & customizable pages. Includes adaptive image grids powered by CSS grid and automatic image integration into projects.`,
     siteImage: `/banner.jpg`,
     siteLanguage: `en`,
@@ -36,6 +36,9 @@ const config: GatsbyConfig = {
       options: {
         output: `/`,
       },
+    },
+    {
+      resolve: `gatsby-plugin-instagram-embed`
     },
     {
       resolve: `gatsby-plugin-manifest`,
