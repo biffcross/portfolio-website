@@ -19,7 +19,6 @@
   "dependencies": {
     "@lekoarts/gatsby-theme-jodie": "^5.0.4",
     "gatsby": "^5.9.0",
-    "gatsby-plugin-instagram-embed": "^4.0.0",
     "gatsby-plugin-manifest": "^5.9.0",
     "gatsby-plugin-sitemap": "^6.9.0",
     "gatsby-plugin-webpack-statoscope": "^1.0.2",

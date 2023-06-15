@@ -38,9 +38,6 @@ const config: GatsbyConfig = {
       },
     },
     {
-      resolve: `gatsby-plugin-instagram-embed`
-    },
-    {
       resolve: `gatsby-plugin-manifest`,
       options: {
         name: `jodie - @lekoarts/gatsby-theme-jodie`,
