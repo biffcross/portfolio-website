@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkbiff=self.webpackChunkbiff||[]).push([[218],{2513:function(e,t,l){l.r(t);var n=l(7294),u=l(1227);t.default=e=>n.createElement(u.Z,null,n.createElement("div",{style:{textAlign:"center"}},n.createElement("h1",null,"404"),n.createElement("p",null,"Page not found.")))}}]);
+//# sourceMappingURL=component---src-pages-404-tsx-6bb1c8da708d7d163464.js.map
