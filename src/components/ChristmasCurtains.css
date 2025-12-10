@@ -1,0 +1,289 @@
+.christmas-curtains {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a3a 50%, #0f0f23 100%);
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+}
+
+.christmas-curtains.visible {
+  opacity: 1;
+}
+
+.curtains-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  z-index: 1;
+}
+
+.curtain {
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  z-index: 10;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.curtain-left {
+  left: 0;
+  transform: translateX(-100%);
+}
+
+.curtain-right {
+  right: 0;
+  transform: translateX(100%);
+}
+
+.christmas-curtains.visible .curtain-left {
+  transform: translateX(0);
+}
+
+.christmas-curtains.visible .curtain-right {
+  transform: translateX(0);
+}
+
+.curtain-fabric {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    #8B0000 0%,
+    #A0001C 15%,
+    #DC143C 30%,
+    #B22222 45%,
+    #8B0000 60%,
+    #A0001C 75%,
+    #DC143C 90%,
+    #8B0000 100%
+  );
+  position: relative;
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.3);
+}
+
+.curtain-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 10px,
+      rgba(255, 215, 0, 0.1) 10px,
+      rgba(255, 215, 0, 0.1) 20px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 15px,
+      rgba(255, 255, 255, 0.05) 15px,
+      rgba(255, 255, 255, 0.05) 30px
+    );
+}
+
+.curtain-fold {
+  position: absolute;
+  width: 100%;
+  height: 20px;
+  background: linear-gradient(90deg, 
+    rgba(0, 0, 0, 0.2) 0%, 
+    transparent 50%, 
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.curtain-fold:nth-child(2) { top: 25%; }
+.curtain-fold:nth-child(3) { top: 50%; }
+.curtain-fold:nth-child(4) { top: 75%; }
+
+.curtain-tassel {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 30px;
+  height: 60px;
+  background: linear-gradient(180deg, #FFD700 0%, #FFA500 100%);
+  border-radius: 15px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.curtain-tassel::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 20px;
+  background: #FFD700;
+  border-radius: 50%;
+}
+
+.curtain-rod {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 20px;
+  background: linear-gradient(180deg, #DAA520 0%, #B8860B 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 25;
+}
+
+.rod-finial {
+  position: absolute;
+  top: -10px;
+  width: 40px;
+  height: 40px;
+  background: radial-gradient(circle, #FFD700 0%, #DAA520 100%);
+  border-radius: 50%;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.rod-finial-left {
+  left: -20px;
+}
+
+.rod-finial-right {
+  right: -20px;
+}
+
+.curtains-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.content-wrapper {
+  text-align: center;
+  color: white;
+  max-width: 600px;
+  width: 100%;
+}
+
+.christmas-title {
+  font-size: 3.5rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.7);
+  background: linear-gradient(45deg, #FFD700, #FFA500, #FF6347, #FFD700);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 3s ease-in-out infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.christmas-message {
+  font-size: 1.4rem;
+  margin-bottom: 2rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+.curtains-countdown {
+  margin: 2rem auto;
+}
+
+.christmas-scene {
+  position: relative;
+  margin-top: 2rem;
+}
+
+.snow-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.snowflake {
+  position: absolute;
+  top: -10px;
+  color: white;
+  font-size: 1rem;
+  animation: fall linear infinite;
+  opacity: 0.8;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes fall {
+  0% {
+    transform: translateY(-10px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .christmas-title {
+    font-size: 2.5rem;
+  }
+  
+  .christmas-message {
+    font-size: 1.2rem;
+  }
+  
+  .curtains-content {
+    padding: 1rem;
+  }
+  
+  .curtain-tassel {
+    width: 20px;
+    height: 40px;
+    bottom: 10px;
+    right: 10px;
+  }
+  
+  .snowflake {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .christmas-title {
+    font-size: 2rem;
+  }
+  
+  .christmas-message {
+    font-size: 1rem;
+  }
+}

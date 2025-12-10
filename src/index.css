@@ -1,0 +1,101 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color: #213547;
+  background-color: #ffffff;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+a {
+  font-weight: 500;
+  color: #000;
+  text-decoration: none;
+}
+a:hover {
+  color: #666;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #ffffff;
+}
+
+h1 {
+  font-size: 1.2em;
+  line-height: 1.1;
+  font-weight: 400;
+}
+
+button {
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  padding: 0.5em 1em;
+  font-size: 0.9em;
+  font-weight: 400;
+  font-family: inherit;
+  background-color: #ffffff;
+  color: #000;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+button:hover {
+  background-color: #f5f5f5;
+  border-color: #999;
+}
+button:focus,
+button:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+/* Image Protection Styles */
+.protected-image {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  pointer-events: auto;
+  outline: none;
+}
+
+.protected-image::selection {
+  background: transparent;
+}
+
+.protected-image::-moz-selection {
+  background: transparent;
+}
+
+/* Disable image context menu and drag operations */
+.protected-image {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+}
+
+/* Additional protection against print screen and dev tools */
+.protected-image {
+  image-rendering: auto;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
