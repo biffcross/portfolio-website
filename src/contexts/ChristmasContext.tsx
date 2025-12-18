@@ -5,6 +5,7 @@ import {
   isJanuary,
   ChristmasState 
 } from '../utils/christmas';
+import { loadPortfolioConfig } from '../utils/config';
 
 interface ChristmasContextType extends ChristmasState {
   shouldShowCurtains: boolean;
@@ -21,6 +22,22 @@ interface ChristmasProviderProps {
 export const ChristmasProvider: React.FC<ChristmasProviderProps> = ({ children }) => {
   const [christmasState, setChristmasState] = useState<ChristmasState>(() => getChristmasState());
   const [isManuallyHidden, setIsManuallyHidden] = useState(false);
+  const [christmasOverride, setChristmasOverride] = useState(false);
+
+  // Load easter egg configuration for Christmas override
+  useEffect(() => {
+    const loadEasterEggConfig = async () => {
+      try {
+        const config = await loadPortfolioConfig();
+        setChristmasOverride(config.easterEggs?.christmasOverride || false);
+      } catch (error) {
+        console.error('Failed to load easter egg configuration:', error);
+        setChristmasOverride(false);
+      }
+    };
+    
+    loadEasterEggConfig();
+  }, []);
 
   useEffect(() => {
     const updateChristmasState = () => {
@@ -66,9 +83,15 @@ export const ChristmasProvider: React.FC<ChristmasProviderProps> = ({ children }
     setIsManuallyHidden(true);
   };
 
+  // Check if we're on localhost for override functionality
+  const isLocalhost = typeof window !== 'undefined' && 
+                     (window.location.hostname === 'localhost' || 
+                      window.location.hostname === '127.0.0.1');
+
   const shouldShowCurtains = shouldShowChristmasCurtains(christmasState.currentUKTime) && 
                             !isManuallyHidden && 
-                            christmasState.isChristmasActive;
+                            christmasState.isChristmasActive &&
+                            !(christmasOverride && isLocalhost); // Hide curtains if override is enabled on localhost
 
   const contextValue: ChristmasContextType = {
     ...christmasState,

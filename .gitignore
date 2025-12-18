@@ -4,6 +4,8 @@ logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Runtime data
 pids
@@ -33,9 +35,9 @@ bower_components
 build/Release
 
 # Dependency directories
-node_modules
-jspm_packages
-**/node_modules/**
+node_modules/
+jspm_packages/
+**/node_modules/
 
 # Typescript v1 declaration files
 typings/
@@ -55,15 +57,82 @@ typings/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
+# Package manager lock files (keep package-lock.json but ignore others)
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+dist-ssr/
+dist-electron/
+build/
+**/dist/
+**/dist-ssr/
+**/dist-electron/
+**/build/
+
+# Environment variables (CRITICAL - contains API keys and secrets)
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.*
 !.env.example
+**/env
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+**/.env.*
+!**/.env.example
 
-.cache
-**/.cache
-public
+# Local configuration files (should be managed through admin interface)
+portfolio-config.json
+**/portfolio-config.json
+config.json
+**/config.json
 
-.idea
-.vscode
+# Cache directories
+.cache/
+**/.cache/
+.parcel-cache/
+**/.parcel-cache/
+
+# Temporary folders
+tmp/
+temp/
+**/tmp/
+**/temp/
+
+# Editor directories and files
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Kiro IDE files
+.kiro/specs/
+
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Electron specific
+*.local
+
+# Test coverage
+coverage/
+**/coverage/
+
+# Storybook build outputs
+storybook-static/
+**/storybook-static/

@@ -1,0 +1,34 @@
+.falling-image {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  
+  /* Prevent dragging */
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  
+  /* Smooth animations */
+  transition: transform 0.1s ease;
+  
+  /* Ensure image covers the container properly */
+  object-fit: cover;
+  
+  /* Add a subtle glow effect */
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+}
+
+.falling-image:hover {
+  filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.5));
+}
+
+/* Prevent text selection on the entire game area */
+.falling-images-game {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}

@@ -1,4 +1,5 @@
 // Configuration types and utilities
+import { R2_BASE_URL } from './cloudflare'
 
 export interface SiteConfig {
   title: string
@@ -26,10 +27,16 @@ export interface ImageConfig {
   uploadDate: string
 }
 
+export interface EasterEggConfig {
+  fireworksEnabled: boolean
+  christmasOverride: boolean
+}
+
 export interface PortfolioConfig {
   site: SiteConfig
   categories: CategoryConfig[]
   images: Record<string, ImageConfig>
+  easterEggs?: EasterEggConfig
 }
 
 // Type guards for runtime validation
@@ -72,6 +79,15 @@ export function isImageConfig(obj: any): obj is ImageConfig {
   )
 }
 
+export function isEasterEggConfig(obj: any): obj is EasterEggConfig {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    typeof obj.fireworksEnabled === 'boolean' &&
+    typeof obj.christmasOverride === 'boolean'
+  )
+}
+
 export function isPortfolioConfig(obj: any): obj is PortfolioConfig {
   return (
     typeof obj === 'object' &&
@@ -81,7 +97,8 @@ export function isPortfolioConfig(obj: any): obj is PortfolioConfig {
     obj.categories.every(isCategoryConfig) &&
     typeof obj.images === 'object' &&
     obj.images !== null &&
-    Object.values(obj.images).every(isImageConfig)
+    Object.values(obj.images).every(isImageConfig) &&
+    (obj.easterEggs === undefined || isEasterEggConfig(obj.easterEggs))
   )
 }
 
@@ -216,32 +233,85 @@ export class ConfigurationError extends Error {
   }
 }
 
+// Construct URL for portfolio configuration in R2
+export function constructConfigUrl(): string {
+  const baseUrl = R2_BASE_URL.replace(/\/$/, '')
+  const configFilename = import.meta.env.CONFIG_FILENAME || 'portfolio-config.json'
+  return `${baseUrl}/${configFilename}`
+}
+
 // Default fallback configuration
 const DEFAULT_CONFIG: PortfolioConfig = {
   site: {
     title: 'Biff Cross Photography',
     description: 'Professional photography portfolio',
     instagram: 'https://instagram.com/biffcross',
-    domain: 'https://biffcross.com'
+    domain: 'https://biffcrossphotography.co.uk'
   },
   categories: [
     {
-      id: 'featured',
-      name: 'Featured',
-      description: 'Featured photography work',
+      id: 'sports',
+      name: 'Sports',
+      description: 'Athletic and sports photography',
+      images: []
+    },
+    {
+      id: 'music',
+      name: 'Music',
+      description: 'Concert and music photography',
+      images: []
+    },
+    {
+      id: 'portraiture',
+      name: 'Portraiture',
+      description: 'Portrait photography',
+      images: []
+    },
+    {
+      id: 'analogue',
+      name: 'Analogue',
+      description: 'Film photography',
+      images: []
+    },
+    {
+      id: 'editorial',
+      name: 'Editorial',
+      description: 'Editorial photography',
       images: []
     }
   ],
-  images: {}
+  images: {},
+  easterEggs: {
+    fireworksEnabled: false,
+    christmasOverride: false
+  }
 }
 
-export async function loadPortfolioConfig(configPath = '/portfolio-config.json'): Promise<PortfolioConfig> {
+export async function loadPortfolioConfig(configPath?: string): Promise<PortfolioConfig> {
   try {
-    // Attempt to fetch the configuration file
-    const response = await fetch(configPath)
+    // Construct R2 URL for configuration file
+    const configUrl = configPath || constructConfigUrl()
+    
+    // Attempt to fetch the configuration file from R2
+    const response = await fetch(configUrl)
     
     if (!response.ok) {
-      console.warn(`Failed to load configuration from ${configPath}: ${response.status} ${response.statusText}`)
+      console.warn(`Failed to load configuration from ${configUrl}: ${response.status} ${response.statusText}`)
+      
+      // Try fallback to local config if R2 fails
+      if (!configPath) {
+        console.log('Attempting fallback to local configuration...')
+        try {
+          const fallbackResponse = await fetch('/portfolio-config.json')
+          if (fallbackResponse.ok) {
+            const fallbackText = await fallbackResponse.text()
+            return parsePortfolioConfig(fallbackText)
+          }
+        } catch (fallbackError) {
+          console.warn('Local configuration fallback also failed:', fallbackError)
+        }
+      }
+      
       return getValidatedConfig(DEFAULT_CONFIG)
     }
     
@@ -297,7 +367,7 @@ export function getValidatedConfig(config: PortfolioConfig): PortfolioConfig {
 
 // Utility to safely load configuration with retry mechanism
 export async function loadPortfolioConfigWithRetry(
-  configPath = '/portfolio-config.json',
+  configPath?: string,
   maxRetries = 3,
   retryDelay = 1000
 ): Promise<PortfolioConfig> {

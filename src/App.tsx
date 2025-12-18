@@ -6,15 +6,25 @@ import About from './pages/About'
 import Contact from './pages/Contact'
 import Category from './pages/Category'
 import ChristmasCurtains from './components/ChristmasCurtains'
+import FallingImagesGame from './components/FallingImagesGame'
+import FireworksEffect from './components/FireworksEffect'
 import { ChristmasProvider, useChristmas } from './contexts/ChristmasContext'
+import { EasterEggProvider, useEasterEgg } from './contexts/EasterEggContext'
 import { loadPortfolioConfig, CategoryConfig } from './utils/config'
 import './App.css'
 
-// Main App Content Component (wrapped by ChristmasProvider)
+// Main App Content Component (wrapped by providers)
 function AppContent() {
   const [categories, setCategories] = useState<CategoryConfig[]>([])
   const [loading, setLoading] = useState(true)
   const { shouldShowCurtains, hideCurtains } = useChristmas()
+  const { 
+    fallingImagesActive, 
+    fireworksEnabled, 
+    portfolioImages,
+    stopFallingImagesGame,
+    updateGameScore
+  } = useEasterEgg()
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -55,6 +65,18 @@ function AppContent() {
           onHide={hideCurtains}
         />
         
+        {/* Easter Egg Features */}
+        <FallingImagesGame
+          isActive={fallingImagesActive}
+          portfolioImages={portfolioImages}
+          onScoreChange={updateGameScore}
+          onGameEnd={stopFallingImagesGame}
+        />
+        
+        <FireworksEffect
+          isEnabled={fireworksEnabled}
+        />
+        
         {/* Main Portfolio Content */}
         <Header />
         <main>
@@ -76,11 +98,13 @@ function AppContent() {
   )
 }
 
-// Root App Component with Christmas Provider
+// Root App Component with Providers
 function App() {
   return (
     <ChristmasProvider>
-      <AppContent />
+      <EasterEggProvider>
+        <AppContent />
+      </EasterEggProvider>
     </ChristmasProvider>
   )
 }
