@@ -26,31 +26,51 @@ class R2UploadError extends Error {
 
 // Validate and extract R2 configuration from environment variables
 function validateR2Config(): R2Config {
+  console.log('🔍 R2 Config Validation - Checking environment variables...');
+  console.log('🔍 import.meta.env:', import.meta.env);
+  
   const accessKeyId = import.meta.env.VITE_R2_ACCESS_KEY_ID;
   const secretAccessKey = import.meta.env.VITE_R2_SECRET_ACCESS_KEY;
   const publicUrl = import.meta.env.VITE_R2_PUBLIC_URL;
   const accountId = import.meta.env.VITE_R2_ACCOUNT_ID;
   const bucketName = import.meta.env.VITE_R2_BUCKET_NAME;
 
+  console.log('🔍 Environment variables found:');
+  console.log('  - VITE_R2_ACCESS_KEY_ID:', accessKeyId ? `${accessKeyId.substring(0, 10)}...` : 'MISSING');
+  console.log('  - VITE_R2_SECRET_ACCESS_KEY:', secretAccessKey ? `${secretAccessKey.substring(0, 10)}...` : 'MISSING');
+  console.log('  - VITE_R2_PUBLIC_URL:', publicUrl || 'MISSING');
+  console.log('  - VITE_R2_ACCOUNT_ID:', accountId || 'MISSING');
+  console.log('  - VITE_R2_BUCKET_NAME:', bucketName || 'MISSING');
+
+  const missingVars: string[] = [];
+  
   if (!accessKeyId) {
-    throw new R2ConfigError('VITE_R2_ACCESS_KEY_ID environment variable is required');
+    missingVars.push('r2AccessKeyId');
   }
 
   if (!secretAccessKey) {
-    throw new R2ConfigError('VITE_R2_SECRET_ACCESS_KEY environment variable is required');
+    missingVars.push('r2SecretAccessKey');
   }
 
   if (!publicUrl) {
-    throw new R2ConfigError('VITE_R2_PUBLIC_URL environment variable is required');
+    missingVars.push('r2PublicUrl');
   }
 
   if (!accountId) {
-    throw new R2ConfigError('VITE_R2_ACCOUNT_ID environment variable is required');
+    missingVars.push('r2AccountId');
   }
 
   if (!bucketName) {
-    throw new R2ConfigError('VITE_R2_BUCKET_NAME environment variable is required');
+    missingVars.push('r2BucketName');
   }
+  
+  if (missingVars.length > 0) {
+    const errorMessage = `Missing required R2 configuration in production mode: ${missingVars.join(', ')}. Please ensure environment variables are set during build.`;
+    console.error('❌ R2 Config Error:', errorMessage);
+    throw new R2ConfigError(`R2 configuration error: ${errorMessage}`);
+  }
+  
+  console.log('✅ All R2 environment variables are present');
   
   return {
     accessKeyId,

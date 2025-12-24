@@ -32,7 +32,25 @@ export default defineConfig(() => {
   const envVars = loadEnvVars()
   
   console.log('🔍 Vite config - loaded env vars:', Object.keys(envVars))
-  console.log('🔍 VITE_R2_ACCESS_KEY_ID:', envVars.VITE_R2_ACCESS_KEY_ID ? 'present' : 'missing')
+  console.log('🔍 Environment variables being defined:')
+  console.log('  - VITE_R2_ACCESS_KEY_ID:', envVars.VITE_R2_ACCESS_KEY_ID ? `${envVars.VITE_R2_ACCESS_KEY_ID.substring(0, 10)}...` : 'MISSING')
+  console.log('  - VITE_R2_SECRET_ACCESS_KEY:', envVars.VITE_R2_SECRET_ACCESS_KEY ? `${envVars.VITE_R2_SECRET_ACCESS_KEY.substring(0, 10)}...` : 'MISSING')
+  console.log('  - VITE_R2_PUBLIC_URL:', envVars.VITE_R2_PUBLIC_URL || 'MISSING')
+  console.log('  - VITE_R2_ACCOUNT_ID:', envVars.VITE_R2_ACCOUNT_ID || 'MISSING')
+  console.log('  - VITE_R2_BUCKET_NAME:', envVars.VITE_R2_BUCKET_NAME || 'MISSING')
+  
+  const defineVars = {
+    'import.meta.env.VITE_R2_ACCESS_KEY_ID': JSON.stringify(envVars.VITE_R2_ACCESS_KEY_ID || process.env.VITE_R2_ACCESS_KEY_ID),
+    'import.meta.env.VITE_R2_SECRET_ACCESS_KEY': JSON.stringify(envVars.VITE_R2_SECRET_ACCESS_KEY || process.env.VITE_R2_SECRET_ACCESS_KEY),
+    'import.meta.env.VITE_R2_PUBLIC_URL': JSON.stringify(envVars.VITE_R2_PUBLIC_URL || process.env.VITE_R2_PUBLIC_URL),
+    'import.meta.env.VITE_R2_ACCOUNT_ID': JSON.stringify(envVars.VITE_R2_ACCOUNT_ID || process.env.VITE_R2_ACCOUNT_ID),
+    'import.meta.env.VITE_R2_BUCKET_NAME': JSON.stringify(envVars.VITE_R2_BUCKET_NAME || process.env.VITE_R2_BUCKET_NAME),
+  }
+  
+  console.log('🔍 Define object values:')
+  Object.entries(defineVars).forEach(([key, value]) => {
+    console.log(`  - ${key}: ${value}`)
+  })
   
   return {
     plugins: [react()],
@@ -44,13 +62,6 @@ export default defineConfig(() => {
       assetsDir: 'assets',
     },
     base: './', // Use relative paths for Electron
-    define: {
-      // Explicitly define environment variables for production builds
-      'import.meta.env.VITE_R2_ACCESS_KEY_ID': JSON.stringify(envVars.VITE_R2_ACCESS_KEY_ID || process.env.VITE_R2_ACCESS_KEY_ID),
-      'import.meta.env.VITE_R2_SECRET_ACCESS_KEY': JSON.stringify(envVars.VITE_R2_SECRET_ACCESS_KEY || process.env.VITE_R2_SECRET_ACCESS_KEY),
-      'import.meta.env.VITE_R2_PUBLIC_URL': JSON.stringify(envVars.VITE_R2_PUBLIC_URL || process.env.VITE_R2_PUBLIC_URL),
-      'import.meta.env.VITE_R2_ACCOUNT_ID': JSON.stringify(envVars.VITE_R2_ACCOUNT_ID || process.env.VITE_R2_ACCOUNT_ID),
-      'import.meta.env.VITE_R2_BUCKET_NAME': JSON.stringify(envVars.VITE_R2_BUCKET_NAME || process.env.VITE_R2_BUCKET_NAME),
-    }
+    define: defineVars
   }
 })
