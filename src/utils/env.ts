@@ -45,13 +45,6 @@ const isValidUrl = (url: string): boolean => {
 }
 
 /**
- * Validates if a string is non-empty and properly formatted
- */
-const isValidString = (value: string): boolean => {
-  return typeof value === 'string' && value.trim().length > 0
-}
-
-/**
  * Validates environment variable values for main website
  */
 const validateEnvironmentValues = (config: Record<string, string>): void => {
