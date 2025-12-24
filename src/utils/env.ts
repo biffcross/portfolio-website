@@ -4,7 +4,7 @@
  */
 
 /**
- * Environment configuration interface
+ * Environment configuration interface for main website
  */
 export interface EnvironmentConfig {
   // Deployment Configuration
@@ -12,20 +12,14 @@ export interface EnvironmentConfig {
   
   // Cloudflare R2 Configuration
   r2PublicUrl: string
-  r2AccessKeyId: string
-  r2SecretAccessKey: string
-  r2ApiToken: string
 }
 
 /**
- * Required environment variable names
+ * Required environment variable names for main website
  */
 const REQUIRED_ENV_VARS = [
   'VITE_CUSTOM_DOMAIN',
-  'VITE_R2_PUBLIC_URL',
-  'VITE_R2_ACCESS_KEY_ID',
-  'VITE_R2_SECRET_ACCESS_KEY',
-  'VITE_R2_API_TOKEN'
+  'VITE_R2_PUBLIC_URL'
 ] as const
 
 /**
@@ -58,7 +52,7 @@ const isValidString = (value: string): boolean => {
 }
 
 /**
- * Validates environment variable values
+ * Validates environment variable values for main website
  */
 const validateEnvironmentValues = (config: Record<string, string>): void => {
   const errors: string[] = []
@@ -73,19 +67,6 @@ const validateEnvironmentValues = (config: Record<string, string>): void => {
     errors.push('VITE_R2_PUBLIC_URL must be a valid URL')
   }
 
-  // Validate R2 credentials are non-empty strings
-  if (!isValidString(config.VITE_R2_ACCESS_KEY_ID)) {
-    errors.push('VITE_R2_ACCESS_KEY_ID must be a non-empty string')
-  }
-
-  if (!isValidString(config.VITE_R2_SECRET_ACCESS_KEY)) {
-    errors.push('VITE_R2_SECRET_ACCESS_KEY must be a non-empty string')
-  }
-
-  if (!isValidString(config.VITE_R2_API_TOKEN)) {
-    errors.push('VITE_R2_API_TOKEN must be a non-empty string')
-  }
-
   if (errors.length > 0) {
     throw new EnvironmentValidationError(
       `Environment validation failed: ${errors.join(', ')}`
@@ -94,7 +75,7 @@ const validateEnvironmentValues = (config: Record<string, string>): void => {
 }
 
 /**
- * Loads and validates environment variables
+ * Loads and validates environment variables for main website
  * @returns Validated environment configuration
  * @throws EnvironmentValidationError if validation fails
  */
@@ -125,10 +106,7 @@ export const loadEnvironmentConfig = (): EnvironmentConfig => {
   // Return typed configuration
   return {
     customDomain: envVars.VITE_CUSTOM_DOMAIN,
-    r2PublicUrl: envVars.VITE_R2_PUBLIC_URL,
-    r2AccessKeyId: envVars.VITE_R2_ACCESS_KEY_ID,
-    r2SecretAccessKey: envVars.VITE_R2_SECRET_ACCESS_KEY,
-    r2ApiToken: envVars.VITE_R2_API_TOKEN
+    r2PublicUrl: envVars.VITE_R2_PUBLIC_URL
   }
 }
 
