@@ -1,4 +1,4 @@
-import { useState, useRef, DragEvent, ChangeEvent } from 'react'
+import { useState, useRef, useEffect, ChangeEvent } from 'react'
 import { useR2Upload } from '../hooks/useR2Upload'
 import { useElectronR2 } from '../hooks/useElectronR2'
 import { useElectronFS, useElectronStatus } from '../hooks/useElectronAPI'
@@ -28,7 +28,6 @@ function FileUploader({
   acceptedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
   maxFileSize = 100 * 1024 * 1024 // 100MB default for high-resolution photography
 }: FileUploaderProps) {
-  const [isDragOver, setIsDragOver] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<FileUploadProgress[]>([])
   const [selectedFilePaths, setSelectedFilePaths] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -42,7 +41,16 @@ function FileUploader({
   const electronR2Upload = useElectronR2()
   
   const isUploading = isElectron ? electronR2Upload.isUploading : browserR2Upload.isUploading
-  const totalProgress = isElectron ? electronR2Upload.totalProgress : browserR2Upload.totalProgress
+
+  // Auto-open file dialog when component mounts
+  useEffect(() => {
+    // Small delay to ensure component is fully rendered
+    const timer = setTimeout(() => {
+      handleBrowseClick()
+    }, 100)
+    
+    return () => clearTimeout(timer)
+  }, []) // Empty dependency array means this runs once on mount
 
   const validateFile = (file: File): string | null => {
     if (!acceptedTypes.includes(file.type)) {
@@ -159,26 +167,6 @@ function FileUploader({
     onUploadProgress?.(newProgress)
   }
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragOver(true)
-  }
-
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragOver(false)
-  }
-
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    
-    const files = e.dataTransfer.files
-    if (files.length > 0) {
-      processFiles(files)
-    }
-  }
-
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (files && files.length > 0) {
@@ -216,7 +204,7 @@ function FileUploader({
     // Update all pending files to uploading status
     const updatedProgress = uploadProgress.map(item => 
       item.status === 'pending' 
-        ? { ...item, status: 'uploading' as const }
+        ? { ...item, status: 'uploading' as const, progress: 0 }
         : item
     )
     setUploadProgress(updatedProgress)
@@ -225,109 +213,130 @@ function FileUploader({
     try {
       if (isElectron && selectedFilePaths.length > 0) {
         // Use Electron R2 upload service
-        await electronR2Upload.uploadFiles(
+        const uploadResults = await electronR2Upload.uploadFiles(
           selectedFilePaths,
           // Key generator: create organized paths
-          (filePath, index) => {
-            const timestamp = Date.now()
+          (filePath) => {
             const fileName = filePath.split(/[\\/]/).pop() || 'unknown'
             const sanitizedName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_')
-            return `images/${timestamp}-${index}-${sanitizedName}`
+            return `images/${sanitizedName}`
           }
         )
 
-        // Update progress with results
-        const finalProgress = uploadProgress.map((item, index) => {
-          if (item.status === 'uploading') {
-            const result = electronR2Upload.results.find(r => 
-              r.key.includes(item.file.name.replace(/[^a-zA-Z0-9.-]/g, '_'))
-            )
-            const error = Object.values(electronR2Upload.errors)[index]
-
-            if (error) {
-              return {
-                ...item,
-                status: 'error' as const,
-                error: error.message,
-                progress: 0
-              }
-            } else if (result) {
-              return {
-                ...item,
-                status: 'completed' as const,
-                progress: 100,
-                result
-              }
+        // Update progress with results - use the results returned directly from the upload function
+        const finalProgress = [...updatedProgress]
+        
+        // Get indices of files that were uploading
+        const uploadingIndices = finalProgress
+          .map((item, index) => item.status === 'uploading' ? index : -1)
+          .filter(index => index !== -1)
+        
+        // Use results returned directly from the upload function
+        const results = uploadResults || []
+        const errors = electronR2Upload.errors
+        
+        // Mark successful uploads - results are in the same order as uploaded files
+        results.forEach((result, resultIndex) => {
+          const progressIndex = uploadingIndices[resultIndex]
+          
+          if (progressIndex !== undefined && progressIndex !== -1) {
+            finalProgress[progressIndex] = {
+              ...finalProgress[progressIndex],
+              status: 'completed' as const,
+              progress: 100,
+              result
             }
           }
-          return item
+        })
+
+        // Mark failed uploads
+        Object.entries(errors).forEach(([indexStr, error]) => {
+          const resultIndex = parseInt(indexStr)
+          const progressIndex = uploadingIndices[resultIndex]
+          
+          if (progressIndex !== undefined && progressIndex !== -1) {
+            finalProgress[progressIndex] = {
+              ...finalProgress[progressIndex],
+              status: 'error' as const,
+              error: error.message,
+              progress: 0
+            }
+          }
         })
 
         setUploadProgress(finalProgress)
         onUploadProgress?.(finalProgress)
 
         // Call completion callback with successful results
-        const successfulResults = finalProgress
-          .filter(item => item.result)
-          .map(item => item.result!)
-        
-        if (successfulResults.length > 0) {
-          onUploadComplete?.(successfulResults)
+        if (results.length > 0) {
+          onUploadComplete?.(results)
         }
 
       } else {
-        // Use browser R2 upload service
+        // Use browser R2 upload service with proper progress tracking
         const pendingFiles = uploadProgress
           .filter(item => item.status === 'pending')
           .map(item => item.file)
 
         if (pendingFiles.length === 0) return
 
+        // Reset the browser upload service
+        browserR2Upload.reset()
+
+        // Start the upload with progress callbacks
         await browserR2Upload.uploadFiles(
           pendingFiles,
           // Key generator: create organized paths
-          (file, index) => {
-            const timestamp = Date.now()
+          (file) => {
             const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-            return `images/${timestamp}-${index}-${sanitizedName}`
+            return `images/${sanitizedName}`
           }
         )
 
-        // Update progress with results
-        const finalProgress = uploadProgress.map((item, index) => {
-          if (item.status === 'uploading') {
-            const result = browserR2Upload.results.find(r => 
-              r.key.includes(item.file.name.replace(/[^a-zA-Z0-9.-]/g, '_'))
-            )
-            const error = browserR2Upload.errors[index]
-
-            if (error) {
-              return {
-                ...item,
-                status: 'error' as const,
-                error: error.message,
-                progress: 0
-              }
-            } else if (result) {
-              return {
-                ...item,
-                status: 'completed' as const,
-                progress: 100,
-                result
-              }
+        // Update progress with results from the upload service
+        const finalProgress = [...updatedProgress]
+        
+        // Mark successful uploads
+        browserR2Upload.results.forEach((result) => {
+          // Find the corresponding file in our progress array
+          const progressIndex = uploadProgress.findIndex(item => 
+            item.status === 'pending' && 
+            item.file.name.replace(/[^a-zA-Z0-9.-]/g, '_') === result.key.split('/').pop()
+          )
+          
+          if (progressIndex !== -1) {
+            finalProgress[progressIndex] = {
+              ...finalProgress[progressIndex],
+              status: 'completed' as const,
+              progress: 100,
+              result
             }
           }
-          return item
+        })
+
+        // Mark failed uploads
+        Object.entries(browserR2Upload.errors).forEach(([indexStr, error]) => {
+          const fileIndex = parseInt(indexStr)
+          // Find the corresponding file in our progress array
+          const progressIndex = uploadProgress.findIndex((item, idx) => 
+            item.status === 'pending' && idx === fileIndex
+          )
+          
+          if (progressIndex !== -1) {
+            finalProgress[progressIndex] = {
+              ...finalProgress[progressIndex],
+              status: 'error' as const,
+              error: error.message,
+              progress: 0
+            }
+          }
         })
 
         setUploadProgress(finalProgress)
         onUploadProgress?.(finalProgress)
 
         // Call completion callback with successful results
-        const successfulResults = finalProgress
-          .filter(item => item.result)
-          .map(item => item.result!)
-        
+        const successfulResults = browserR2Upload.results
         if (successfulResults.length > 0) {
           onUploadComplete?.(successfulResults)
         }
@@ -366,22 +375,14 @@ function FileUploader({
   return (
     <div className="file-uploader">
       <div 
-        className={`upload-zone ${isDragOver ? 'drag-over' : ''}`}
-        onDragOver={!isElectron ? handleDragOver : undefined}
-        onDragLeave={!isElectron ? handleDragLeave : undefined}
-        onDrop={!isElectron ? handleDrop : undefined}
+        className="upload-zone"
         onClick={handleBrowseClick}
       >
         <div className="upload-content">
           <div className="upload-icon">📁</div>
-          <h3>
-            {isElectron ? 'Click to browse for images' : 'Drop images here or click to browse'}
-          </h3>
+          <h3>Click here to browse files</h3>
           <p>Supports: {acceptedTypes.join(', ')}</p>
           <p>Max file size: {(maxFileSize / 1024 / 1024).toFixed(2)}MB</p>
-          {isElectron && (
-            <p><em>Running in Electron - drag and drop disabled, using native file dialog</em></p>
-          )}
         </div>
         {!isElectron && (
           <input
@@ -410,13 +411,13 @@ function FileUploader({
                     onClick={startUpload}
                     disabled={uploadProgress.filter(item => item.status === 'pending').length === 0}
                   >
-                    Upload to R2 {isElectron ? '(Electron)' : '(Browser)'}
+                    Upload
                   </button>
                 </>
               )}
               {isUploading && (
                 <div className="upload-status">
-                  Uploading... {totalProgress}%
+                  Uploading...
                 </div>
               )}
             </div>

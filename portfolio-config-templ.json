@@ -1,0 +1,46 @@
+{
+  "site": {
+    "title": "Biff Cross Photography",
+    "description": "Professional photography portfolio",
+    "instagram": "https://www.instagram.com/biffxcross",
+    "domain": "https://biffcrossphotography.co.uk",
+    "email": "biffcross@hotmail.co.uk"
+  },
+  "categories": [
+    {
+      "id": "sports",
+      "name": "Sports",
+      "description": "Athletic and sports photography",
+      "images": []
+    },
+    {
+      "id": "music",
+      "name": "Music",
+      "description": "Concert and music photography",
+      "images": []
+    },
+    {
+      "id": "portraiture",
+      "name": "Portraiture",
+      "description": "Portrait photography",
+      "images": []
+    },
+    {
+      "id": "analogue",
+      "name": "Analogue",
+      "description": "Film photography",
+      "images": []
+    },
+    {
+      "id": "editorial",
+      "name": "Editorial",
+      "description": "Editorial photography",
+      "images": []
+    }
+  ],
+  "images": {},
+  "easterEggs": {
+    "fireworksEnabled": true,
+    "christmasOverride": true
+  }
+}

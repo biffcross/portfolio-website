@@ -50,12 +50,14 @@ export class R2Service {
     this.config = this.validateR2Config();
     
     // Log configuration details (without sensitive data)
-    console.log('R2Service initialized with configuration:');
-    console.log(`  Endpoint: ${this.config.endpoint}`);
-    console.log(`  Bucket Name: ${this.config.bucketName}`);
-    console.log(`  Region: ${this.config.region}`);
-    console.log(`  Public URL: ${this.config.publicUrl}`);
-    console.log(`  Access Key ID: ${this.config.accessKeyId.substring(0, 8)}...`);
+    console.log('\n=== R2Service Initialization ===');
+    console.log(`Endpoint: ${this.config.endpoint}`);
+    console.log(`Bucket Name: ${this.config.bucketName}`);
+    console.log(`Region: ${this.config.region}`);
+    console.log(`Public URL: ${this.config.publicUrl}`);
+    console.log(`Access Key ID: ${this.config.accessKeyId.substring(0, 8)}...`);
+    console.log(`Secret Key Length: ${this.config.secretAccessKey.length} chars`);
+    console.log('=== R2Service Ready ===\n');
     
     this.s3Client = new S3Client({
       region: this.config.region,
@@ -65,6 +67,13 @@ export class R2Service {
         secretAccessKey: this.config.secretAccessKey,
       },
       forcePathStyle: false,
+    });
+    
+    console.log('S3Client created with configuration:', {
+      region: this.config.region,
+      endpoint: this.config.endpoint,
+      forcePathStyle: false,
+      credentialsProvided: !!(this.config.accessKeyId && this.config.secretAccessKey)
     });
   }
 
@@ -76,6 +85,7 @@ export class R2Service {
     const { getElectronConfig } = require('../utils/config');
     
     try {
+      console.log('\n--- R2 Configuration Validation ---');
       console.log('Loading R2 configuration from environment variables...');
       const electronConfig = getElectronConfig();
       
@@ -83,7 +93,9 @@ export class R2Service {
         r2AccountId: electronConfig.r2AccountId,
         r2BucketName: electronConfig.r2BucketName,
         r2PublicUrl: electronConfig.r2PublicUrl,
-        r2AccessKeyId: electronConfig.r2AccessKeyId ? `${electronConfig.r2AccessKeyId.substring(0, 8)}...` : 'NOT SET'
+        r2AccessKeyId: electronConfig.r2AccessKeyId ? `${electronConfig.r2AccessKeyId.substring(0, 8)}...` : 'NOT SET',
+        r2SecretAccessKey: electronConfig.r2SecretAccessKey ? `${electronConfig.r2SecretAccessKey.length} chars` : 'NOT SET',
+        configFilename: electronConfig.configFilename
       });
       
       const config = {
@@ -99,12 +111,17 @@ export class R2Service {
         endpoint: config.endpoint,
         bucketName: config.bucketName,
         region: config.region,
-        publicUrl: config.publicUrl
+        publicUrl: config.publicUrl,
+        accessKeyId: config.accessKeyId ? `${config.accessKeyId.substring(0, 8)}...` : 'NOT SET',
+        secretAccessKey: config.secretAccessKey ? `${config.secretAccessKey.length} chars` : 'NOT SET'
       });
+      console.log('--- Configuration Validation Complete ---\n');
       
       return config;
     } catch (error) {
-      console.error('R2 configuration validation failed:', error);
+      console.error('--- R2 Configuration Validation Failed ---');
+      console.error('Error details:', error);
+      console.error('--- Validation Error End ---\n');
       if (error instanceof Error) {
         throw new R2ConfigError(`R2 configuration error: ${error.message}`);
       }
@@ -236,19 +253,42 @@ export class R2Service {
   ): Promise<UploadResult> {
     let lastError: Error | null = null;
 
+    console.log(`\n--- R2 Buffer Upload Details ---`);
+    console.log(`Key: ${key}`);
+    console.log(`Buffer Size: ${buffer.length} bytes`);
+    console.log(`Content Type: ${contentType || 'application/octet-stream'}`);
+    console.log(`Max Retries: ${maxRetries}`);
+    console.log(`S3 Client Config:`);
+    console.log(`  - Region: ${this.config.region}`);
+    console.log(`  - Endpoint: ${this.config.endpoint}`);
+    console.log(`  - Bucket: ${this.config.bucketName}`);
+    console.log(`  - Access Key: ${this.config.accessKeyId.substring(0, 8)}...`);
+    console.log(`--- Starting Upload ---`);
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        console.log(`\nAttempt ${attempt}/${maxRetries}:`);
+        
+        const uploadParams = {
+          Bucket: this.config.bucketName,
+          Key: key,
+          Body: buffer,
+          ContentType: contentType || 'application/octet-stream',
+          Metadata: {
+            'upload-timestamp': new Date().toISOString(),
+          },
+        };
+        
+        console.log(`Upload Parameters:`);
+        console.log(`  - Bucket: ${uploadParams.Bucket}`);
+        console.log(`  - Key: ${uploadParams.Key}`);
+        console.log(`  - ContentType: ${uploadParams.ContentType}`);
+        console.log(`  - Body Size: ${uploadParams.Body.length} bytes`);
+        console.log(`  - Metadata:`, uploadParams.Metadata);
+        
         const upload = new Upload({
           client: this.s3Client,
-          params: {
-            Bucket: this.config.bucketName,
-            Key: key,
-            Body: buffer,
-            ContentType: contentType || 'application/octet-stream',
-            Metadata: {
-              'upload-timestamp': new Date().toISOString(),
-            },
-          },
+          params: uploadParams,
           partSize: 1024 * 1024 * 10, // 10MB parts
           queueSize: 4, // Upload 4 parts concurrently
         });
@@ -257,6 +297,7 @@ export class R2Service {
         if (onProgress) {
           upload.on('httpUploadProgress', (progress) => {
             if (progress.loaded !== undefined && progress.total !== undefined) {
+              console.log(`Upload Progress: ${progress.loaded}/${progress.total} bytes (${Math.round((progress.loaded / progress.total) * 100)}%)`);
               onProgress({
                 loaded: progress.loaded,
                 total: progress.total,
@@ -266,19 +307,40 @@ export class R2Service {
           });
         }
 
-        await upload.done();
+        console.log(`Executing upload with 30 second timeout...`);
+        
+        // Create a timeout promise
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000);
+        });
+        
+        // Race between upload and timeout
+        await Promise.race([upload.done(), timeoutPromise]);
+        
+        console.log(`✓ Upload completed successfully on attempt ${attempt}`);
 
         // Construct the public URL
         const publicUrl = `${this.config.publicUrl}/${key}`;
+        console.log(`Constructed Public URL: ${publicUrl}`);
 
-        return {
+        const result = {
           key,
           url: publicUrl,
           size: buffer.length,
         };
+        
+        console.log(`Final Result:`, result);
+        return result;
 
       } catch (error) {
         lastError = error instanceof Error ? error : new Error('Unknown upload error');
+        console.log(`✗ Upload attempt ${attempt} failed:`);
+        console.log(`  Error Name: ${lastError.name}`);
+        console.log(`  Error Message: ${lastError.message}`);
+        console.log(`  Error Stack:`, lastError.stack);
+        console.log(`  Bucket: ${this.config.bucketName}`);
+        console.log(`  Endpoint: ${this.config.endpoint}`);
+        console.log(`  Key: ${key}`);
         
         if (attempt === maxRetries) {
           break;
@@ -286,10 +348,19 @@ export class R2Service {
 
         // Exponential backoff: wait 2^attempt seconds before retry
         const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
+    console.log(`\n--- Upload Failed After All Attempts ---`);
+    console.log(`All ${maxRetries} attempts failed for buffer upload`);
+    console.log(`Target bucket: ${this.config.bucketName}`);
+    console.log(`Endpoint: ${this.config.endpoint}`);
+    console.log(`Key: ${key}`);
+    console.log(`Final error: ${lastError?.message}`);
+    console.log(`--- End Upload Failure ---\n`);
+    
     throw new R2UploadError(
       `Failed to upload buffer after ${maxRetries} attempts: ${lastError?.message}`,
       lastError || undefined
@@ -300,15 +371,66 @@ export class R2Service {
    * Upload portfolio configuration to R2
    */
   async uploadConfiguration(config: any): Promise<void> {
-    const configJson = JSON.stringify(config, null, 2);
-    const configBuffer = Buffer.from(configJson, 'utf-8');
+    try {
+      const configJson = JSON.stringify(config, null, 2);
+      const configBuffer = Buffer.from(configJson, 'utf-8');
 
-    // Use configFilename from environment
-    const { getElectronConfig } = require('../utils/config');
-    const electronConfig = getElectronConfig();
-    
-    console.log(`Uploading configuration to: ${electronConfig.configFilename}`);
-    await this.uploadFile(configBuffer, electronConfig.configFilename, 'application/json');
+      // Use configFilename from environment
+      const { getElectronConfig } = require('../utils/config');
+      const electronConfig = getElectronConfig();
+      
+      console.log(`\n=== Configuration Upload Debug ===`);
+      console.log(`Target file: ${electronConfig.configFilename}`);
+      console.log(`Config size: ${configBuffer.length} bytes`);
+      console.log(`Bucket Name: ${this.config.bucketName}`);
+      console.log(`Endpoint: ${this.config.endpoint}`);
+      console.log(`Public URL Base: ${this.config.publicUrl}`);
+      console.log(`Region: ${this.config.region}`);
+      console.log(`Access Key ID: ${this.config.accessKeyId.substring(0, 8)}...`);
+      console.log(`Full Upload URL: ${this.config.endpoint}/${this.config.bucketName}/${electronConfig.configFilename}`);
+      console.log(`Expected Public URL: ${this.config.publicUrl}/${electronConfig.configFilename}`);
+      console.log(`Config Preview:`, configJson.substring(0, 200) + '...');
+      
+      console.log(`🚀 Starting upload to R2...`);
+      const result = await this.uploadFile(configBuffer, electronConfig.configFilename, 'application/json');
+      
+      console.log(`✅ UPLOAD SUCCESSFUL!`);
+      console.log(`📁 File uploaded to: ${result.key}`);
+      console.log(`🌐 Public URL: ${result.url}`);
+      console.log(`📊 File Size: ${result.size} bytes`);
+      
+      // Verify the upload by trying to fetch the config from the public URL
+      console.log(`🔍 Verifying upload by fetching from public URL...`);
+      try {
+        const verifyResponse = await fetch(result.url);
+        if (verifyResponse.ok) {
+          const verifyText = await verifyResponse.text();
+          const verifyConfig = JSON.parse(verifyText);
+          console.log(`✅ VERIFICATION SUCCESSFUL!`);
+          console.log(`📋 Config verified - Easter eggs:`, verifyConfig.easterEggs);
+          console.log(`📏 Verified config size: ${verifyText.length} bytes`);
+        } else {
+          console.log(`⚠️ Verification failed - HTTP ${verifyResponse.status}: ${verifyResponse.statusText}`);
+          console.log(`🔗 Tried to fetch: ${result.url}`);
+        }
+      } catch (verifyError) {
+        console.log(`⚠️ Verification error:`, verifyError instanceof Error ? verifyError.message : 'Unknown error');
+        console.log(`🔗 Tried to fetch: ${result.url}`);
+      }
+      
+      console.log(`=== Upload Complete ===\n`);
+      
+    } catch (error) {
+      console.error(`\n❌ CONFIGURATION UPLOAD FAILED!`);
+      console.error(`💥 Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(`📚 Error Stack:`, error instanceof Error ? error.stack : 'No stack trace');
+      console.error(`🪣 Bucket Name: ${this.config.bucketName}`);
+      console.error(`🔗 Endpoint: ${this.config.endpoint}`);
+      console.error(`🌐 Public URL Base: ${this.config.publicUrl}`);
+      console.error(`🔑 Access Key ID: ${this.config.accessKeyId.substring(0, 8)}...`);
+      console.error(`=== Upload Failed ===\n`);
+      throw error;
+    }
   }
 
   /**
@@ -368,17 +490,98 @@ export class R2Service {
   /**
    * Delete a file from R2 storage
    */
-  async deleteFile(key: string): Promise<void> {
-    try {
-      const command = new DeleteObjectCommand({
-        Bucket: this.config.bucketName,
-        Key: key,
-      });
+  async deleteFile(key: string, maxRetries: number = 3): Promise<void> {
+    let lastError: Error | null = null;
 
-      await this.s3Client.send(command);
-    } catch (error) {
-      throw new Error(`Failed to delete file "${key}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.log(`\n=== R2 Delete Operation ===`);
+    console.log(`Target Key: ${key}`);
+    console.log(`Bucket: ${this.config.bucketName}`);
+    console.log(`Max Retries: ${maxRetries}`);
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`\n--- Delete Attempt ${attempt}/${maxRetries} ---`);
+        
+        const command = new DeleteObjectCommand({
+          Bucket: this.config.bucketName,
+          Key: key,
+        });
+
+        console.log(`Delete command parameters:`, {
+          Bucket: this.config.bucketName,
+          Key: key
+        });
+
+        await this.s3Client.send(command);
+        console.log(`✓ Delete successful on attempt ${attempt}`);
+        return;
+
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown deletion error');
+        console.log(`✗ Delete attempt ${attempt} failed:`, {
+          error: lastError.message,
+          errorName: lastError.name,
+          bucket: this.config.bucketName,
+          key: key
+        });
+        
+        if (attempt === maxRetries) {
+          break;
+        }
+
+        // Exponential backoff: wait 2^attempt seconds before retry
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
+
+    console.log(`\n=== Delete Failed ===`);
+    console.log(`All ${maxRetries} attempts failed for key: ${key}`);
+    console.log(`Target bucket: ${this.config.bucketName}`);
+    console.log(`Final error: ${lastError?.message}`);
+    
+    throw new Error(`Failed to delete file "${key}" after ${maxRetries} attempts: ${lastError?.message}`);
+  }
+
+  /**
+   * Delete multiple files from R2 storage
+   */
+  async deleteFiles(keys: string[], maxRetries: number = 3): Promise<{ success: string[], failed: { key: string, error: string }[] }> {
+    console.log(`\n=== R2 Batch Delete Operation ===`);
+    console.log(`Keys to delete: ${keys.length}`);
+    console.log(`Keys:`, keys);
+
+    const results = {
+      success: [] as string[],
+      failed: [] as { key: string, error: string }[]
+    };
+
+    // Delete files sequentially to avoid overwhelming the service
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      console.log(`\n--- Processing ${i + 1}/${keys.length}: ${key} ---`);
+      
+      try {
+        await this.deleteFile(key, maxRetries);
+        results.success.push(key);
+        console.log(`✓ Successfully deleted: ${key}`);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        results.failed.push({ key, error: errorMessage });
+        console.log(`✗ Failed to delete: ${key} - ${errorMessage}`);
+      }
+    }
+
+    console.log(`\n=== Batch Delete Complete ===`);
+    console.log(`Successful deletions: ${results.success.length}`);
+    console.log(`Failed deletions: ${results.failed.length}`);
+    
+    if (results.failed.length > 0) {
+      console.log(`Failed keys:`, results.failed.map(f => f.key));
+    }
+
+    return results;
   }
 
   /**

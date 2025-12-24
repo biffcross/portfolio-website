@@ -42,6 +42,14 @@ export const useKonamiCode = () => {
       ...prev,
       isActivated: true
     }));
+    
+    // Reset activation state after a short delay to allow for toggling
+    setTimeout(() => {
+      setState(prev => ({
+        ...prev,
+        isActivated: false
+      }));
+    }, 100);
   }, []);
 
   const deactivateKonamiCode = useCallback(() => {
@@ -76,8 +84,8 @@ export const useKonamiCode = () => {
             return {
               ...prev,
               isActivated: true,
-              currentSequence: newSequence,
-              sequenceProgress: newProgress
+              currentSequence: [], // Reset for next time
+              sequenceProgress: 0 // Reset for next time
             };
           }
 

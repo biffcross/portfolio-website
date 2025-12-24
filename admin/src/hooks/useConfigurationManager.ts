@@ -6,6 +6,8 @@ export interface PortfolioConfig {
     title: string;
     description: string;
     instagram: string;
+    domain?: string;
+    email?: string;
   };
   categories: Array<{
     id: string;
@@ -15,12 +17,16 @@ export interface PortfolioConfig {
   }>;
   images: Record<string, {
     filename: string;
-    caption: string;
+    caption?: string;
     description?: string;
-    category: string;
+    categories: string[];
     order: number;
-    dimensions: { width: number; height: number };
+    categoryOrders?: Record<string, number>; // Per-category ordering
     uploadDate: string;
+    dimensions?: { width: number; height: number };
+    is_featured: boolean;
+    // Legacy support for migration
+    category?: string;
   }>;
   easterEggs: {
     fireworksEnabled: boolean;
@@ -50,13 +56,46 @@ export interface ConfigurationManagerActions {
 export interface UseConfigurationManagerReturn extends ConfigurationManagerState, ConfigurationManagerActions {}
 
 /**
+ * Migrate legacy single-category configuration to multi-category format
+ */
+const migrateConfigurationToMultiCategory = (config: any): PortfolioConfig => {
+  // If already migrated, return as-is
+  if (config.images && Object.values(config.images).every((img: any) => img.categories && img.is_featured !== undefined)) {
+    return config as PortfolioConfig
+  }
+
+  // Create migrated configuration
+  const migratedConfig = { ...config }
+  
+  // Migrate images from single category to categories array and add is_featured property
+  if (migratedConfig.images) {
+    Object.keys(migratedConfig.images).forEach(filename => {
+      const image = migratedConfig.images[filename]
+      if (image.category && !image.categories) {
+        // Migrate single category to categories array
+        image.categories = [image.category]
+        // Keep legacy category field for backward compatibility during transition
+      }
+      // Add is_featured property with default value of false for existing images
+      if (image.is_featured === undefined) {
+        image.is_featured = false
+      }
+    })
+  }
+
+  return migratedConfig as PortfolioConfig
+}
+
+/**
  * Default portfolio configuration template
  */
 const createDefaultPortfolioConfig = (): PortfolioConfig => ({
   site: {
     title: "Biff Cross Photography",
     description: "Professional photography portfolio",
-    instagram: "https://instagram.com/biffcross"
+    instagram: "https://www.instagram.com/biffxcross",
+    domain: "https://biffcrossphotography.co.uk",
+    email: "biffcross@hotmail.co.uk"
   },
   categories: [
     {
@@ -136,13 +175,16 @@ export function useConfigurationManager(): UseConfigurationManagerReturn {
       const config = await downloadConfig();
       
       if (config) {
+        // Migrate legacy configuration to multi-category format
+        const migratedConfig = migrateConfigurationToMultiCategory(config);
+        
         // Validate and merge with default config to ensure all required fields exist
         const defaultConfig = createDefaultPortfolioConfig();
         const mergedConfig: PortfolioConfig = {
-          site: { ...defaultConfig.site, ...config.site },
-          categories: config.categories || defaultConfig.categories,
-          images: config.images || defaultConfig.images,
-          easterEggs: { ...defaultConfig.easterEggs, ...config.easterEggs }
+          site: { ...defaultConfig.site, ...migratedConfig.site },
+          categories: migratedConfig.categories || defaultConfig.categories,
+          images: migratedConfig.images || defaultConfig.images,
+          easterEggs: { ...defaultConfig.easterEggs, ...migratedConfig.easterEggs }
         };
 
         setState(prev => ({
@@ -190,13 +232,42 @@ export function useConfigurationManager(): UseConfigurationManagerReturn {
       const success = await uploadConfig(config);
       
       if (success) {
-        setState(prev => ({
-          ...prev,
-          isSaving: false,
-          lastSaved: new Date(),
-          hasUnsavedChanges: false,
-          error: null
-        }));
+        // Wait a moment for R2 to propagate the change
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Reload configuration from R2 to verify it was saved correctly
+        try {
+          const reloadedConfig = await downloadConfig();
+          
+          if (reloadedConfig) {
+            // Update state with the verified config
+            setState(prev => ({
+              ...prev,
+              config: reloadedConfig,
+              isSaving: false,
+              lastSaved: new Date(),
+              hasUnsavedChanges: false,
+              error: null
+            }));
+          } else {
+            setState(prev => ({
+              ...prev,
+              isSaving: false,
+              lastSaved: new Date(),
+              hasUnsavedChanges: false,
+              error: null
+            }));
+          }
+        } catch (verifyError) {
+          // Still mark as successful since upload succeeded
+          setState(prev => ({
+            ...prev,
+            isSaving: false,
+            lastSaved: new Date(),
+            hasUnsavedChanges: false,
+            error: null
+          }));
+        }
 
         return true;
       } else {
@@ -208,7 +279,7 @@ export function useConfigurationManager(): UseConfigurationManagerReturn {
       setSaving(false);
       return false;
     }
-  }, [state.config, uploadConfig]);
+  }, [state.config, uploadConfig, downloadConfig]);
 
   const updateConfig = useCallback((updates: Partial<PortfolioConfig>) => {
     setState(prev => {
@@ -297,13 +368,16 @@ export function useConfigurationManager(): UseConfigurationManagerReturn {
               throw new Error('Invalid configuration file format');
             }
 
+            // Migrate legacy configuration to multi-category format
+            const migratedConfig = migrateConfigurationToMultiCategory(importedConfig);
+
             // Merge with default config to ensure all required fields
             const defaultConfig = createDefaultPortfolioConfig();
             const mergedConfig: PortfolioConfig = {
-              site: { ...defaultConfig.site, ...importedConfig.site },
-              categories: importedConfig.categories || defaultConfig.categories,
-              images: importedConfig.images || defaultConfig.images,
-              easterEggs: { ...defaultConfig.easterEggs, ...importedConfig.easterEggs }
+              site: { ...defaultConfig.site, ...migratedConfig.site },
+              categories: migratedConfig.categories || defaultConfig.categories,
+              images: migratedConfig.images || defaultConfig.images,
+              easterEggs: { ...defaultConfig.easterEggs, ...migratedConfig.easterEggs }
             };
 
             setState(prev => ({

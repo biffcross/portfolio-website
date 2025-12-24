@@ -18,10 +18,14 @@ export interface ImageMetadata {
   filename: string;
   caption: string;
   description?: string;
-  category: string;
+  categories: string[];
   order: number;
+  categoryOrders?: Record<string, number>; // Per-category ordering
   dimensions: { width: number; height: number };
   uploadDate: string;
+  is_featured: boolean;
+  // Legacy support for migration
+  category?: string;
 }
 
 export interface CategoryData {
@@ -50,6 +54,8 @@ export interface R2ServiceInterface {
   uploadConfiguration: (config: any) => Promise<void>;
   downloadConfiguration: () => Promise<any>;
   testConnection: () => Promise<boolean>;
+  deleteFile: (key: string) => Promise<void>;
+  deleteFiles: (keys: string[]) => Promise<{ success: string[], failed: { key: string, error: string }[] }>;
 }
 
 /**
@@ -71,6 +77,88 @@ export class ConfigurationService {
 
   constructor(r2Service: R2ServiceInterface) {
     this.r2Service = r2Service;
+  }
+
+  /**
+   * Get the next order number for a category
+   */
+  private getNextOrderForCategory(categoryId: string): number {
+    if (!this.config) return 0;
+
+    // Find all images in this category and get the highest order
+    const categoryImages = Object.values(this.config.images).filter(img => {
+      const imgCategories = img.categories || (img.category ? [img.category] : []);
+      return imgCategories.includes(categoryId);
+    });
+
+    if (categoryImages.length === 0) return 0;
+
+    // Use categoryOrders if available, otherwise fall back to global order
+    const orders = categoryImages.map(img => {
+      if (img.categoryOrders && img.categoryOrders[categoryId] !== undefined) {
+        return img.categoryOrders[categoryId];
+      }
+      return img.order;
+    });
+
+    return Math.max(...orders) + 1;
+  }
+
+  /**
+   * Update category orders for an image
+   */
+  private updateCategoryOrders(imageMetadata: ImageMetadata, categories: string[]): ImageMetadata {
+    const categoryOrders = imageMetadata.categoryOrders ? { ...imageMetadata.categoryOrders } : {};
+
+    // Set order for each category
+    categories.forEach(categoryId => {
+      if (categoryOrders[categoryId] === undefined) {
+        categoryOrders[categoryId] = this.getNextOrderForCategory(categoryId);
+      }
+    });
+
+    // Remove orders for categories no longer assigned
+    Object.keys(categoryOrders).forEach(categoryId => {
+      if (!categories.includes(categoryId)) {
+        delete categoryOrders[categoryId];
+      }
+    });
+
+    return {
+      ...imageMetadata,
+      categoryOrders
+    };
+  }
+
+  /**
+   * Migrate legacy single-category configuration to multi-category format
+   */
+  private migrateConfigurationToMultiCategory(config: any): PortfolioConfig {
+    // If already migrated, return as-is
+    if (config.images && Object.values(config.images).every((img: any) => img.categories && img.is_featured !== undefined)) {
+      return config as PortfolioConfig
+    }
+
+    // Create migrated configuration
+    const migratedConfig = { ...config }
+    
+    // Migrate images from single category to categories array and add is_featured property
+    if (migratedConfig.images) {
+      Object.keys(migratedConfig.images).forEach(filename => {
+        const image = migratedConfig.images[filename]
+        if (image.category && !image.categories) {
+          // Migrate single category to categories array
+          image.categories = [image.category]
+          // Keep legacy category field for backward compatibility during transition
+        }
+        // Add is_featured property with default value of false for existing images
+        if (image.is_featured === undefined) {
+          image.is_featured = false
+        }
+      })
+    }
+
+    return migratedConfig as PortfolioConfig
   }
 
   /**
@@ -147,8 +235,11 @@ export class ConfigurationService {
         const configData = await this.r2Service.downloadConfiguration();
         
         if (configData) {
+          // Migrate legacy configuration to multi-category format
+          const migratedConfig = this.migrateConfigurationToMultiCategory(configData);
+          
           // Validate the loaded configuration
-          const validation = this.validateConfiguration(configData);
+          const validation = this.validateConfiguration(migratedConfig);
           
           if (!validation.isValid) {
             const errorMessage = `Configuration validation failed: ${validation.errors.join(', ')}`;
@@ -159,10 +250,10 @@ export class ConfigurationService {
           // Merge with default config to ensure all required fields exist
           const defaultConfig = this.createDefaultConfig();
           const mergedConfig: PortfolioConfig = {
-            site: { ...defaultConfig.site, ...configData.site },
-            categories: configData.categories || defaultConfig.categories,
-            images: configData.images || defaultConfig.images,
-            easterEggs: { ...defaultConfig.easterEggs, ...configData.easterEggs }
+            site: { ...defaultConfig.site, ...migratedConfig.site },
+            categories: migratedConfig.categories || defaultConfig.categories,
+            images: migratedConfig.images || defaultConfig.images,
+            easterEggs: { ...defaultConfig.easterEggs, ...migratedConfig.easterEggs }
           };
 
           this.config = mergedConfig;
@@ -242,7 +333,7 @@ export class ConfigurationService {
    */
   async addImage(
     filename: string,
-    category: string,
+    categories: string[],
     caption: string = '',
     description: string = '',
     dimensions: { width: number; height: number } = { width: 0, height: 0 }
@@ -253,10 +344,12 @@ export class ConfigurationService {
       return { success: false, error };
     }
 
-    // Validate category exists
-    const categoryExists = this.config.categories.some(cat => cat.id === category);
-    if (!categoryExists) {
-      const error = `Category "${category}" does not exist`;
+    // Validate categories exist
+    const invalidCategories = categories.filter(category => 
+      !this.config!.categories.some(cat => cat.id === category)
+    );
+    if (invalidCategories.length > 0) {
+      const error = `Categories do not exist: ${invalidCategories.join(', ')}`;
       this.notifyError(error);
       return { success: false, error };
     }
@@ -268,34 +361,37 @@ export class ConfigurationService {
       return { success: false, error };
     }
 
-    // Calculate order for the new image in the category
-    const categoryImages = Object.values(this.config.images)
-      .filter(img => img.category === category)
-      .sort((a, b) => a.order - b.order);
-    
-    const nextOrder = categoryImages.length > 0 
-      ? Math.max(...categoryImages.map(img => img.order)) + 1 
+    // Calculate order for the new image (global order for backward compatibility)
+    const allImages = Object.values(this.config.images);
+    const nextGlobalOrder = allImages.length > 0 
+      ? Math.max(...allImages.map(img => img.order)) + 1 
       : 0;
 
-    // Add image metadata
-    const imageMetadata: ImageMetadata = {
+    // Create initial image metadata
+    let imageMetadata: ImageMetadata = {
       filename,
-      caption,
+      caption: caption || '', // Ensure caption is never undefined
       description,
-      category,
-      order: nextOrder,
+      categories: [...categories], // Create a copy of the array
+      order: nextGlobalOrder,
       dimensions,
-      uploadDate: new Date().toISOString()
+      uploadDate: new Date().toISOString(),
+      is_featured: false // Default value for new images
     };
+
+    // Update category orders
+    imageMetadata = this.updateCategoryOrders(imageMetadata, categories);
 
     // Update configuration
     this.config.images[filename] = imageMetadata;
     
-    // Add to category images array
-    const categoryData = this.config.categories.find(cat => cat.id === category);
-    if (categoryData && !categoryData.images.includes(filename)) {
-      categoryData.images.push(filename);
-    }
+    // Add to category images arrays
+    categories.forEach(categoryId => {
+      const categoryData = this.config!.categories.find(cat => cat.id === categoryId);
+      if (categoryData && !categoryData.images.includes(filename)) {
+        categoryData.images.push(filename);
+      }
+    });
 
     this.hasUnsavedChanges = true;
     this.notifyChange(this.config);
@@ -324,47 +420,62 @@ export class ConfigurationService {
       return { success: false, error };
     }
 
-    // Handle category change
-    if (updates.category && updates.category !== existingImage.category) {
-      // Validate new category exists
-      const categoryExists = this.config.categories.some(cat => cat.id === updates.category);
-      if (!categoryExists) {
-        const error = `Category "${updates.category}" does not exist`;
+    // Handle categories change
+    if (updates.categories) {
+      // Validate new categories exist
+      const invalidCategories = updates.categories.filter(category => 
+        !this.config!.categories.some(cat => cat.id === category)
+      );
+      if (invalidCategories.length > 0) {
+        const error = `Categories do not exist: ${invalidCategories.join(', ')}`;
         this.notifyError(error);
         return { success: false, error };
       }
 
-      // Remove from old category
-      const oldCategory = this.config.categories.find(cat => cat.id === existingImage.category);
-      if (oldCategory) {
-        oldCategory.images = oldCategory.images.filter(img => img !== filename);
-      }
+      // Get current categories (handle both new and legacy format)
+      const currentCategories = existingImage.categories || (existingImage.category ? [existingImage.category] : []);
+      
+      // Remove from old categories
+      currentCategories.forEach(categoryId => {
+        const category = this.config!.categories.find(cat => cat.id === categoryId);
+        if (category) {
+          category.images = category.images.filter(img => img !== filename);
+        }
+      });
 
-      // Add to new category
-      const newCategory = this.config.categories.find(cat => cat.id === updates.category);
-      if (newCategory && !newCategory.images.includes(filename)) {
-        newCategory.images.push(filename);
-      }
+      // Add to new categories
+      updates.categories.forEach(categoryId => {
+        const category = this.config!.categories.find(cat => cat.id === categoryId);
+        if (category && !category.images.includes(filename)) {
+          category.images.push(filename);
+        }
+      });
+    }
 
-      // Recalculate order for new category
-      if (updates.order === undefined) {
-        const categoryImages = Object.values(this.config.images)
-          .filter(img => img.category === updates.category && img.filename !== filename)
-          .sort((a, b) => a.order - b.order);
-        
-        updates.order = categoryImages.length > 0 
-          ? Math.max(...categoryImages.map(img => img.order)) + 1 
-          : 0;
-      }
+    // Handle legacy category update (for backward compatibility)
+    if (updates.category && !updates.categories) {
+      // Convert single category to categories array
+      updates.categories = [updates.category];
+      delete updates.category; // Remove legacy field from updates
     }
 
     // Update image metadata
-    this.config.images[filename] = {
+    let updatedImageMetadata = {
       ...existingImage,
       ...updates,
       filename, // Ensure filename doesn't change
-      uploadDate: existingImage.uploadDate // Preserve original upload date
+      uploadDate: existingImage.uploadDate, // Preserve original upload date
+      caption: updates.caption !== undefined ? updates.caption : existingImage.caption || '', // Ensure caption is always a string
+      dimensions: updates.dimensions || existingImage.dimensions || { width: 0, height: 0 }, // Ensure dimensions is always defined
+      is_featured: updates.is_featured !== undefined ? updates.is_featured : existingImage.is_featured || false // Ensure is_featured is always defined
     };
+
+    // Update category orders if categories changed
+    if (updates.categories) {
+      updatedImageMetadata = this.updateCategoryOrders(updatedImageMetadata, updates.categories);
+    }
+
+    this.config.images[filename] = updatedImageMetadata;
 
     this.hasUnsavedChanges = true;
     this.notifyChange(this.config);
@@ -374,7 +485,7 @@ export class ConfigurationService {
   }
 
   /**
-   * Remove image from configuration with automatic sync
+   * Remove image from configuration with automatic sync and R2 deletion
    */
   async removeImage(filename: string): Promise<ConfigurationUpdateResult> {
     if (!this.config) {
@@ -390,20 +501,94 @@ export class ConfigurationService {
       return { success: false, error };
     }
 
-    // Remove from images object
-    delete this.config.images[filename];
+    try {
+      // Delete from R2 storage first
+      const imageKey = `images/${filename}`;
+      await this.r2Service.deleteFile(imageKey);
 
-    // Remove from category images array
-    const category = this.config.categories.find(cat => cat.id === existingImage.category);
-    if (category) {
-      category.images = category.images.filter(img => img !== filename);
+      // Remove from configuration
+      delete this.config.images[filename];
+
+      // Remove from category images arrays (handle both new and legacy format)
+      const imageCategories = existingImage.categories || (existingImage.category ? [existingImage.category] : []);
+      imageCategories.forEach(categoryId => {
+        const category = this.config!.categories.find(cat => cat.id === categoryId);
+        if (category) {
+          category.images = category.images.filter(img => img !== filename);
+        }
+      });
+
+      this.hasUnsavedChanges = true;
+      this.notifyChange(this.config);
+
+      // Automatically save configuration
+      return await this.saveConfiguration();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete image';
+      this.notifyError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Remove multiple images from configuration with automatic sync and R2 deletion
+   */
+  async removeImages(filenames: string[]): Promise<ConfigurationUpdateResult> {
+    if (!this.config) {
+      const error = 'Configuration not loaded';
+      this.notifyError(error);
+      return { success: false, error };
     }
 
-    this.hasUnsavedChanges = true;
-    this.notifyChange(this.config);
+    // Validate all images exist
+    const missingImages = filenames.filter(filename => !this.config!.images[filename]);
+    if (missingImages.length > 0) {
+      const error = `Images not found: ${missingImages.join(', ')}`;
+      this.notifyError(error);
+      return { success: false, error };
+    }
 
-    // Automatically save configuration
-    return await this.saveConfiguration();
+    try {
+      // Delete from R2 storage first
+      const imageKeys = filenames.map(filename => `images/${filename}`);
+      const deleteResults = await this.r2Service.deleteFiles(imageKeys);
+
+      // Check if any deletions failed
+      if (deleteResults.failed.length > 0) {
+        const failedFilenames = deleteResults.failed.map(f => f.key.replace('images/', ''));
+        const error = `Failed to delete some images from R2: ${failedFilenames.join(', ')}`;
+        this.notifyError(error);
+        return { success: false, error };
+      }
+
+      // Remove from configuration
+      filenames.forEach(filename => {
+        const existingImage = this.config!.images[filename];
+        if (existingImage) {
+          // Remove from images object
+          delete this.config!.images[filename];
+
+          // Remove from category images arrays (handle both new and legacy format)
+          const imageCategories = existingImage.categories || (existingImage.category ? [existingImage.category] : []);
+          imageCategories.forEach(categoryId => {
+            const category = this.config!.categories.find(cat => cat.id === categoryId);
+            if (category) {
+              category.images = category.images.filter(img => img !== filename);
+            }
+          });
+        }
+      });
+
+      this.hasUnsavedChanges = true;
+      this.notifyChange(this.config);
+
+      // Automatically save configuration
+      return await this.saveConfiguration();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete images';
+      this.notifyError(errorMessage);
+      return { success: false, error: errorMessage };
+    }
   }
 
   /**
@@ -435,17 +620,27 @@ export class ConfigurationService {
         this.notifyError(error);
         return { success: false, error };
       }
-      if (image.category !== category) {
+      
+      // Check if image belongs to the category (handle both new and legacy format)
+      const imageCategories = image.categories || (image.category ? [image.category] : []);
+      if (!imageCategories.includes(category)) {
         const error = `Image "${filename}" does not belong to category "${category}"`;
         this.notifyError(error);
         return { success: false, error };
       }
     }
 
-    // Update order for each image
+    // Update category-specific order for each image
+    const updatedImages = { ...this.config.images };
     orderedFilenames.forEach((filename, index) => {
-      if (this.config!.images[filename]) {
-        this.config!.images[filename].order = index;
+      const image = updatedImages[filename];
+      if (image) {
+        const categoryOrders = image.categoryOrders ? { ...image.categoryOrders } : {};
+        categoryOrders[category] = index;
+        updatedImages[filename] = {
+          ...image,
+          categoryOrders
+        };
       }
     });
 
@@ -455,13 +650,106 @@ export class ConfigurationService {
     this.hasUnsavedChanges = true;
     this.notifyChange(this.config);
 
+    // Update the configuration
+    this.config.images = updatedImages;
+
     // Automatically save configuration
     return await this.saveConfiguration();
   }
 
   /**
-   * Update easter egg settings with automatic sync
+   * Update featured status of an image with automatic sync
    */
+  async updateImageFeaturedStatus(
+    filename: string,
+    is_featured: boolean
+  ): Promise<ConfigurationUpdateResult> {
+    if (!this.config) {
+      const error = 'Configuration not loaded';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    const existingImage = this.config.images[filename];
+    if (!existingImage) {
+      const error = `Image "${filename}" not found in configuration`;
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Update the featured status
+    this.config.images[filename] = {
+      ...existingImage,
+      is_featured
+    };
+
+    this.hasUnsavedChanges = true;
+    this.notifyChange(this.config);
+
+    // Automatically save configuration
+    return await this.saveConfiguration();
+  }
+
+  /**
+   * Update featured status of multiple images with automatic sync
+   */
+  async updateMultipleImagesFeaturedStatus(
+    updates: Array<{ filename: string; is_featured: boolean }>
+  ): Promise<ConfigurationUpdateResult> {
+    if (!this.config) {
+      const error = 'Configuration not loaded';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Validate all images exist
+    const missingImages = updates.filter(update => !this.config!.images[update.filename]);
+    if (missingImages.length > 0) {
+      const error = `Images not found: ${missingImages.map(u => u.filename).join(', ')}`;
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Update all featured statuses
+    updates.forEach(({ filename, is_featured }) => {
+      const existingImage = this.config!.images[filename];
+      if (existingImage) {
+        this.config!.images[filename] = {
+          ...existingImage,
+          is_featured
+        };
+      }
+    });
+
+    this.hasUnsavedChanges = true;
+    this.notifyChange(this.config);
+
+    // Automatically save configuration
+    return await this.saveConfiguration();
+  }
+
+  /**
+   * Get all featured images
+   */
+  getFeaturedImages(): ImageMetadata[] {
+    if (!this.config) return [];
+    
+    return Object.values(this.config.images)
+      .filter(image => image.is_featured)
+      .map(image => ({
+        ...image,
+        caption: image.caption || '', // Ensure caption is always a string
+        dimensions: image.dimensions || { width: 0, height: 0 }, // Ensure dimensions is always defined
+        is_featured: image.is_featured || false // Ensure is_featured is always defined
+      }));
+  }
+
+  /**
+   * Get count of featured images
+   */
+  getFeaturedImageCount(): number {
+    return this.getFeaturedImages().length;
+  }
   async updateEasterEggSettings(
     settings: Partial<PortfolioConfig['easterEggs']>
   ): Promise<ConfigurationUpdateResult> {
@@ -481,6 +769,216 @@ export class ConfigurationService {
 
     // Automatically save configuration
     return await this.saveConfiguration();
+  }
+
+  /**
+   * Add a new category to the configuration with automatic sync
+   */
+  async addCategory(
+    categoryData: CategoryData
+  ): Promise<ConfigurationUpdateResult> {
+    if (!this.config) {
+      const error = 'Configuration not loaded';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Validate category ID is unique
+    const existingCategory = this.config.categories.find(cat => cat.id === categoryData.id);
+    if (existingCategory) {
+      const error = `Category with ID "${categoryData.id}" already exists`;
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Validate required fields
+    if (!categoryData.id.trim() || !categoryData.name.trim() || !categoryData.description.trim()) {
+      const error = 'Category ID, name, and description are required';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Validate ID format
+    if (!/^[a-z0-9-]+$/.test(categoryData.id)) {
+      const error = 'Category ID can only contain lowercase letters, numbers, and hyphens';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Add new category
+    const newCategory: CategoryData = {
+      id: categoryData.id.trim(),
+      name: categoryData.name.trim(),
+      description: categoryData.description.trim(),
+      images: []
+    };
+
+    this.config.categories.push(newCategory);
+
+    this.hasUnsavedChanges = true;
+    this.notifyChange(this.config);
+
+    // Automatically save configuration
+    return await this.saveConfiguration();
+  }
+
+  /**
+   * Update an existing category with automatic sync
+   */
+  async updateCategory(
+    categoryId: string,
+    updates: Partial<Omit<CategoryData, 'id' | 'images'>>
+  ): Promise<ConfigurationUpdateResult> {
+    if (!this.config) {
+      const error = 'Configuration not loaded';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    const categoryIndex = this.config.categories.findIndex(cat => cat.id === categoryId);
+    if (categoryIndex === -1) {
+      const error = `Category "${categoryId}" not found`;
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Validate required fields if provided
+    if (updates.name !== undefined && !updates.name.trim()) {
+      const error = 'Category name cannot be empty';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    if (updates.description !== undefined && !updates.description.trim()) {
+      const error = 'Category description cannot be empty';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    // Update category
+    this.config.categories[categoryIndex] = {
+      ...this.config.categories[categoryIndex],
+      ...updates,
+      name: updates.name?.trim() || this.config.categories[categoryIndex].name,
+      description: updates.description?.trim() || this.config.categories[categoryIndex].description
+    };
+
+    this.hasUnsavedChanges = true;
+    this.notifyChange(this.config);
+
+    // Automatically save configuration
+    return await this.saveConfiguration();
+  }
+
+  /**
+   * Remove a category from the configuration with automatic sync
+   * Handles images assigned to the deleted category by moving them to uncategorized
+   */
+  async removeCategory(
+    categoryId: string,
+    moveImagesToUncategorized: boolean = true
+  ): Promise<ConfigurationUpdateResult> {
+    if (!this.config) {
+      const error = 'Configuration not loaded';
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    const categoryIndex = this.config.categories.findIndex(cat => cat.id === categoryId);
+    if (categoryIndex === -1) {
+      const error = `Category "${categoryId}" not found`;
+      this.notifyError(error);
+      return { success: false, error };
+    }
+
+    const category = this.config.categories[categoryIndex];
+
+    // Handle images assigned to this category
+    if (category.images.length > 0) {
+      if (moveImagesToUncategorized) {
+        // Ensure "uncategorized" category exists
+        let uncategorizedCategory = this.config.categories.find(cat => cat.id === 'uncategorized');
+        if (!uncategorizedCategory) {
+          uncategorizedCategory = {
+            id: 'uncategorized',
+            name: 'Uncategorized',
+            description: 'Images without a specific category',
+            images: []
+          };
+          this.config.categories.push(uncategorizedCategory);
+        }
+
+        // Move images to uncategorized
+        category.images.forEach(imageId => {
+          const image = this.config!.images[imageId];
+          if (image) {
+            // Update image categories (remove deleted category, add uncategorized if not present)
+            const currentCategories = image.categories || (image.category ? [image.category] : []);
+            const updatedCategories = currentCategories.filter(cat => cat !== categoryId);
+            
+            if (!updatedCategories.includes('uncategorized')) {
+              updatedCategories.push('uncategorized');
+            }
+
+            // Update image metadata
+            this.config!.images[imageId] = {
+              ...image,
+              categories: updatedCategories
+            };
+
+            // Add to uncategorized category if not already there
+            if (!uncategorizedCategory!.images.includes(imageId)) {
+              uncategorizedCategory!.images.push(imageId);
+            }
+          }
+        });
+      } else {
+        // Remove category from all images without moving to uncategorized
+        category.images.forEach(imageId => {
+          const image = this.config!.images[imageId];
+          if (image) {
+            const currentCategories = image.categories || (image.category ? [image.category] : []);
+            const updatedCategories = currentCategories.filter(cat => cat !== categoryId);
+
+            this.config!.images[imageId] = {
+              ...image,
+              categories: updatedCategories
+            };
+          }
+        });
+      }
+    }
+
+    // Remove the category
+    this.config.categories.splice(categoryIndex, 1);
+
+    this.hasUnsavedChanges = true;
+    this.notifyChange(this.config);
+
+    // Automatically save configuration
+    return await this.saveConfiguration();
+  }
+
+  /**
+   * Get all existing category IDs for validation
+   */
+  getCategoryIds(): string[] {
+    return this.config ? this.config.categories.map(cat => cat.id) : [];
+  }
+
+  /**
+   * Get category by ID
+   */
+  getCategory(categoryId: string): CategoryData | null {
+    return this.config ? this.config.categories.find(cat => cat.id === categoryId) || null : null;
+  }
+
+  /**
+   * Get images count for a category
+   */
+  getCategoryImageCount(categoryId: string): number {
+    const category = this.getCategory(categoryId);
+    return category ? category.images.length : 0;
   }
 
   /**

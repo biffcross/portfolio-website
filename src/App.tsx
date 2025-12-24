@@ -6,7 +6,7 @@ import About from './pages/About'
 import Contact from './pages/Contact'
 import Category from './pages/Category'
 import ChristmasCurtains from './components/ChristmasCurtains'
-import FallingImagesGame from './components/FallingImagesGame'
+import XrayMode from './components/XrayMode'
 import FireworksEffect from './components/FireworksEffect'
 import { ChristmasProvider, useChristmas } from './contexts/ChristmasContext'
 import { EasterEggProvider, useEasterEgg } from './contexts/EasterEggContext'
@@ -19,11 +19,8 @@ function AppContent() {
   const [loading, setLoading] = useState(true)
   const { shouldShowCurtains, hideCurtains } = useChristmas()
   const { 
-    fallingImagesActive, 
-    fireworksEnabled, 
-    portfolioImages,
-    stopFallingImagesGame,
-    updateGameScore
+    xrayModeActive, 
+    fireworksEnabled
   } = useEasterEgg()
 
   useEffect(() => {
@@ -66,11 +63,8 @@ function AppContent() {
         />
         
         {/* Easter Egg Features */}
-        <FallingImagesGame
-          isActive={fallingImagesActive}
-          portfolioImages={portfolioImages}
-          onScoreChange={updateGameScore}
-          onGameEnd={stopFallingImagesGame}
+        <XrayMode
+          isActive={xrayModeActive}
         />
         
         <FireworksEffect

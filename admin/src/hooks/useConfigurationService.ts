@@ -31,6 +31,21 @@ class ElectronR2ServiceAdapter implements R2ServiceInterface {
     const result = await this.electronAPI.r2.testConnection();
     return result.success && result.connected === true;
   }
+
+  async deleteFile(key: string): Promise<void> {
+    const result = await this.electronAPI.r2.deleteFile(key);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to delete file');
+    }
+  }
+
+  async deleteFiles(keys: string[]): Promise<{ success: string[], failed: { key: string, error: string }[] }> {
+    const result = await this.electronAPI.r2.deleteFiles(keys);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to delete files');
+    }
+    return result.results || { success: [], failed: keys.map(key => ({ key, error: 'Unknown error' })) };
+  }
 }
 
 export interface UseConfigurationServiceState {
@@ -189,7 +204,7 @@ export function useConfigurationService(): UseConfigurationServiceReturn {
     try {
       const result = await configServiceRef.current.addImage(
         filename,
-        category,
+        [category], // Convert single category to array
         caption,
         description,
         dimensions

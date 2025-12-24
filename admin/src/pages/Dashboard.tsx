@@ -8,8 +8,7 @@ function Dashboard() {
   const { 
     config, 
     isLoading: configLoading, 
-    loadConfiguration, 
-    exportConfigToFile
+    loadConfiguration
     // saveConfiguration 
   } = useConfigurationManager();
   
@@ -18,6 +17,7 @@ function Dashboard() {
   const [stats, setStats] = useState({
     totalImages: 0,
     totalCategories: 0,
+    featuredImages: 0,
     lastUpload: null as Date | null
   });
 
@@ -29,20 +29,16 @@ function Dashboard() {
   // Update stats when config changes
   useEffect(() => {
     if (config) {
+      const featuredCount = Object.values(config.images).filter(img => img.is_featured).length;
       setStats({
         totalImages: Object.keys(config.images).length,
         totalCategories: config.categories.length,
+        featuredImages: featuredCount,
         lastUpload: null // TODO: Track last upload date
       });
     }
   }, [config]);
 
-  const handleExportConfig = async () => {
-    const success = await exportConfigToFile();
-    if (!success) {
-      alert('Failed to export configuration. Please check the console for details.');
-    }
-  };
 
   // const handleSaveToR2 = async () => {
   //   const success = await saveConfiguration();
@@ -123,6 +119,20 @@ function Dashboard() {
           borderRadius: '6px',
           border: '1px solid #dee2e6'
         }}>
+          <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#495057', marginBottom: '0.5rem' }}>
+            {configLoading ? '...' : stats.featuredImages}
+          </div>
+          <div style={{ fontSize: '0.9rem', color: '#6c757d', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Featured Images
+          </div>
+        </div>
+        
+        <div style={{ 
+          padding: '1.5rem', 
+          background: '#f8f9fa', 
+          borderRadius: '6px',
+          border: '1px solid #dee2e6'
+        }}>
           <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#495057', marginBottom: '0.5rem' }}>
             {config?.site.title || 'Loading...'}
           </div>
@@ -132,65 +142,64 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Configuration Details */}
-      {config && (
-        <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ fontSize: '0.9rem', fontWeight: '500', marginBottom: '1rem', color: '#495057', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Current Configuration
-          </h3>
+
+
+      {/* Featured Images Information */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h3 style={{ fontSize: '0.9rem', fontWeight: '500', marginBottom: '1rem', color: '#495057', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Featured Images
+        </h3>
+        <div style={{ 
+          padding: '1.5rem', 
+          background: '#fff', 
+          border: '1px solid #dee2e6', 
+          borderRadius: '6px'
+        }}>
+          <div style={{ marginBottom: '1rem' }}>
+            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#495057' }}>
+              Featured images are displayed on the home page of your portfolio website. 
+              They serve as the first impression for visitors and should showcase your best work.
+            </p>
+            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: '#6c757d' }}>
+              Currently, you have <strong>{stats.featuredImages}</strong> image{stats.featuredImages !== 1 ? 's' : ''} marked as featured.
+            </p>
+          </div>
+          
           <div style={{ 
+            padding: '1rem', 
             background: '#f8f9fa', 
-            border: '1px solid #dee2e6', 
-            borderRadius: '6px', 
-            padding: '1.5rem'
+            borderRadius: '4px',
+            marginBottom: '1rem'
           }}>
-            <div className="grid grid-2" style={{ gap: '2rem' }}>
-              <div>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '1rem', color: '#343a40' }}>
-                  Site Information
-                </h4>
-                <div style={{ fontSize: '0.85rem', lineHeight: '1.6', color: '#6c757d' }}>
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <strong>Title:</strong> {config.site.title}
-                  </div>
-                  <div style={{ marginBottom: '0.5rem' }}>
-                    <strong>Description:</strong> {config.site.description}
-                  </div>
-                  <div>
-                    <strong>Instagram:</strong> {config.site.instagram}
-                  </div>
-                </div>
-              </div>
-              
-              <div>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: '600', marginBottom: '1rem', color: '#343a40' }}>
-                  Feature Settings
-                </h4>
-                <div style={{ fontSize: '0.85rem', lineHeight: '1.6', color: '#6c757d' }}>
-                  <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ 
-                      width: '8px', 
-                      height: '8px', 
-                      borderRadius: '50%', 
-                      background: config.easterEggs.fireworksEnabled ? '#28a745' : '#dc3545'
-                    }}></div>
-                    <strong>Fireworks:</strong> {config.easterEggs.fireworksEnabled ? 'Enabled' : 'Disabled'}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ 
-                      width: '8px', 
-                      height: '8px', 
-                      borderRadius: '50%', 
-                      background: config.easterEggs.christmasOverride ? '#ffc107' : '#6c757d'
-                    }}></div>
-                    <strong>Christmas Override:</strong> {config.easterEggs.christmasOverride ? 'Active' : 'Inactive'}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <h4 style={{ fontSize: '0.8rem', fontWeight: '600', margin: '0 0 0.5rem 0', color: '#495057' }}>
+              Recommendations:
+            </h4>
+            <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.8rem', color: '#6c757d' }}>
+              <li>Choose 6-12 of your strongest images for optimal home page display</li>
+              <li>Select images that represent the variety and quality of your work</li>
+              <li>Consider the visual flow and composition when viewed together</li>
+              <li>Update featured images regularly to keep your portfolio fresh</li>
+            </ul>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button 
+              className="btn"
+              onClick={() => navigate('/images?filter=featured')}
+              style={{ fontSize: '0.9rem' }}
+            >
+              View Featured Images
+            </button>
+            <button 
+              className="btn btn-secondary"
+              onClick={() => navigate('/images')}
+              style={{ fontSize: '0.9rem' }}
+            >
+              Manage All Images
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Category Overview */}
       {config && config.categories.length > 0 && (
@@ -206,12 +215,28 @@ function Dashboard() {
             {config.categories.map(category => {
               const imageCount = category.images.length
               return (
-                <div key={category.id} style={{ 
-                  padding: '1rem', 
-                  background: '#fff', 
-                  border: '1px solid #dee2e6', 
-                  borderRadius: '6px'
-                }}>
+                <div 
+                  key={category.id} 
+                  onClick={() => navigate(`/images?filter=${category.id}`)}
+                  style={{ 
+                    padding: '1rem', 
+                    background: '#fff', 
+                    border: '1px solid #dee2e6', 
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#007bff'
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,123,255,0.1)'
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#dee2e6'
+                    e.currentTarget.style.boxShadow = 'none'
+                    e.currentTarget.style.transform = 'translateY(0)'
+                  }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                     <h4 style={{ fontSize: '0.9rem', fontWeight: '600', margin: 0, color: '#343a40' }}>
                       {category.name}
@@ -226,8 +251,11 @@ function Dashboard() {
                       {imageCount}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#6c757d' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#6c757d', marginBottom: '0.5rem' }}>
                     {category.description}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#007bff', fontWeight: '500' }}>
+                    Click to view images →
                   </div>
                 </div>
               )
@@ -256,22 +284,9 @@ function Dashboard() {
           </button>
           <button 
             className="btn btn-secondary" 
-            onClick={() => navigate('/configuration')}
-          >
-            Settings
-          </button>
-          <button 
-            className="btn btn-secondary" 
             onClick={() => navigate('/easter-eggs')}
           >
             Easter Eggs
-          </button>
-          <button 
-            className="btn btn-secondary" 
-            onClick={handleExportConfig}
-            disabled={!config || configLoading}
-          >
-            Export
           </button>
         </div>
       </div>

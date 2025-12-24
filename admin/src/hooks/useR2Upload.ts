@@ -51,8 +51,8 @@ export function useR2Upload(): UseR2UploadReturn {
 
   const uploadFiles = useCallback(async (
     files: File[],
-    keyGenerator: (file: File, index: number) => string = (file, index) => 
-      `images/${Date.now()}-${index}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+    keyGenerator: (file: File, index: number) => string = (file) => 
+      `images/${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
   ) => {
     if (files.length === 0) return;
 
@@ -116,7 +116,7 @@ export function useR2Upload(): UseR2UploadReturn {
     file: File,
     key?: string
   ): Promise<UploadResult | null> => {
-    const fileKey = key || `images/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    const fileKey = key || `images/${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 
     setState(prev => ({
       ...prev,

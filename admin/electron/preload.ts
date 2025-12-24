@@ -16,6 +16,7 @@ export interface ElectronAPI {
     uploadConfiguration: (config: any) => Promise<{ success: boolean; error?: string }>;
     downloadConfiguration: () => Promise<{ success: boolean; config?: any; error?: string }>;
     deleteFile: (key: string) => Promise<{ success: boolean; error?: string }>;
+    deleteFiles: (keys: string[]) => Promise<{ success: boolean; results?: { success: string[], failed: { key: string, error: string }[] }; error?: string }>;
     listFiles: (prefix?: string) => Promise<{ success: boolean; files?: string[]; error?: string }>;
     testConnection: () => Promise<{ success: boolean; connected?: boolean; error?: string }>;
     onUploadProgress: (callback: (data: { key: string; progress: UploadProgress }) => void) => any;
@@ -60,6 +61,8 @@ const electronAPI: ElectronAPI = {
       ipcRenderer.invoke('r2:download-config'),
     deleteFile: (key: string) => 
       ipcRenderer.invoke('r2:delete-file', key),
+    deleteFiles: (keys: string[]) => 
+      ipcRenderer.invoke('r2:delete-files', keys),
     listFiles: (prefix?: string) => 
       ipcRenderer.invoke('r2:list-files', prefix),
     testConnection: () => 

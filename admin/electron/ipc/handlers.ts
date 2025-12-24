@@ -81,6 +81,17 @@ export const registerIpcHandlers = (): void => {
     }
   });
 
+  ipcMain.handle('r2:delete-files', async (_event, keys: string[]) => {
+    try {
+      const service = getR2Service();
+      const results = await service.deleteFiles(keys);
+      return { success: true, results };
+    } catch (error) {
+      console.error('R2 batch delete error:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Batch delete failed' };
+    }
+  });
+
   ipcMain.handle('r2:list-files', async (_event, prefix?: string) => {
     try {
       const service = getR2Service();
@@ -196,6 +207,7 @@ export const unregisterIpcHandlers = (): void => {
   ipcMain.removeAllListeners('r2:upload-config');
   ipcMain.removeAllListeners('r2:download-config');
   ipcMain.removeAllListeners('r2:delete-file');
+  ipcMain.removeAllListeners('r2:delete-files');
   ipcMain.removeAllListeners('r2:list-files');
   ipcMain.removeAllListeners('r2:test-connection');
   ipcMain.removeAllListeners('fs:select-files');

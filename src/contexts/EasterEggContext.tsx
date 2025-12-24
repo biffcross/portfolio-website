@@ -4,11 +4,9 @@ import { loadPortfolioConfig, EasterEggConfig } from '../utils/config';
 
 export interface EasterEggState {
   konamiCodeActivated: boolean;
-  fallingImagesActive: boolean;
+  xrayModeActive: boolean;
   fireworksEnabled: boolean;
-  gameScore: number;
   christmasOverride: boolean;
-  portfolioImages: string[];
 }
 
 interface EasterEggContextType extends EasterEggState {
@@ -17,10 +15,8 @@ interface EasterEggContextType extends EasterEggState {
   deactivateKonamiCode: () => void;
   resetKonamiSequence: () => void;
   
-  // Falling images game controls
-  startFallingImagesGame: () => void;
-  stopFallingImagesGame: () => void;
-  updateGameScore: (score: number) => void;
+  // X-ray mode controls
+  toggleXrayMode: (enabled: boolean) => void;
   
   // Fireworks controls
   toggleFireworks: (enabled: boolean) => void;
@@ -42,11 +38,9 @@ interface EasterEggProviderProps {
 export const EasterEggProvider: React.FC<EasterEggProviderProps> = ({ children }) => {
   const [easterEggState, setEasterEggState] = useState<EasterEggState>({
     konamiCodeActivated: false,
-    fallingImagesActive: false,
+    xrayModeActive: false,
     fireworksEnabled: false,
-    gameScore: 0,
-    christmasOverride: false,
-    portfolioImages: []
+    christmasOverride: false
   });
 
   // Use Konami code hook
@@ -57,21 +51,15 @@ export const EasterEggProvider: React.FC<EasterEggProviderProps> = ({ children }
     resetSequence
   } = useKonamiCode();
 
-  // Load configuration and portfolio images
+  // Load configuration
   const loadConfiguration = async () => {
     try {
       const config = await loadPortfolioConfig();
       
-      // Extract all image filenames from categories
-      const allImages = config.categories.reduce<string[]>((acc, category) => {
-        return [...acc, ...category.images];
-      }, []);
-      
       setEasterEggState(prev => ({
         ...prev,
         fireworksEnabled: config.easterEggs?.fireworksEnabled || false,
-        christmasOverride: config.easterEggs?.christmasOverride || false,
-        portfolioImages: allImages
+        christmasOverride: config.easterEggs?.christmasOverride || false
       }));
     } catch (error) {
       console.error('Failed to load easter egg configuration:', error);
@@ -79,8 +67,7 @@ export const EasterEggProvider: React.FC<EasterEggProviderProps> = ({ children }
       setEasterEggState(prev => ({
         ...prev,
         fireworksEnabled: false,
-        christmasOverride: false,
-        portfolioImages: []
+        christmasOverride: false
       }));
     }
   };
@@ -98,16 +85,15 @@ export const EasterEggProvider: React.FC<EasterEggProviderProps> = ({ children }
     }));
   }, [isKonamiActivated]);
 
-  // Auto-start falling images game when Konami code is activated
+  // Auto-activate X-ray mode when Konami code is activated
   useEffect(() => {
-    if (isKonamiActivated && !easterEggState.fallingImagesActive) {
+    if (isKonamiActivated) {
       setEasterEggState(prev => ({
         ...prev,
-        fallingImagesActive: true,
-        gameScore: 0
+        xrayModeActive: !prev.xrayModeActive
       }));
     }
-  }, [isKonamiActivated, easterEggState.fallingImagesActive]);
+  }, [isKonamiActivated]);
 
   // Context methods
   const activateKonamiCode = () => {
@@ -118,8 +104,7 @@ export const EasterEggProvider: React.FC<EasterEggProviderProps> = ({ children }
     deactivateKonami();
     setEasterEggState(prev => ({
       ...prev,
-      fallingImagesActive: false,
-      gameScore: 0
+      xrayModeActive: false
     }));
   };
 
@@ -127,25 +112,10 @@ export const EasterEggProvider: React.FC<EasterEggProviderProps> = ({ children }
     resetSequence();
   };
 
-  const startFallingImagesGame = () => {
+  const toggleXrayMode = (enabled: boolean) => {
     setEasterEggState(prev => ({
       ...prev,
-      fallingImagesActive: true,
-      gameScore: 0
-    }));
-  };
-
-  const stopFallingImagesGame = () => {
-    setEasterEggState(prev => ({
-      ...prev,
-      fallingImagesActive: false
-    }));
-  };
-
-  const updateGameScore = (score: number) => {
-    setEasterEggState(prev => ({
-      ...prev,
-      gameScore: score
+      xrayModeActive: enabled
     }));
   };
 
@@ -179,9 +149,7 @@ export const EasterEggProvider: React.FC<EasterEggProviderProps> = ({ children }
     activateKonamiCode,
     deactivateKonamiCode,
     resetKonamiSequence,
-    startFallingImagesGame,
-    stopFallingImagesGame,
-    updateGameScore,
+    toggleXrayMode,
     toggleFireworks,
     toggleChristmasOverride,
     updateEasterEggConfig,

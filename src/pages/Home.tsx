@@ -16,21 +16,46 @@ const Home = () => {
         
         const portfolioConfig = await loadPortfolioConfig()
         
-        // Get featured images from all categories (first 3 images from each category that has images)
+        // Get images marked as featured
         const featured: string[] = []
-        portfolioConfig.categories.forEach(category => {
-          if (category.images.length > 0) {
-            // Take up to 3 images from each category for the featured gallery
-            const imagesToTake = Math.min(3, category.images.length)
-            for (let i = 0; i < imagesToTake; i++) {
-              const imageName = category.images[i]
-              const imageConfig = portfolioConfig.images[imageName]
-              if (imageConfig) {
-                featured.push(constructImageUrl(imageConfig.filename))
-              }
-            }
+        Object.values(portfolioConfig.images).forEach(imageConfig => {
+          if (imageConfig.is_featured) {
+            featured.push(constructImageUrl(imageConfig.filename))
           }
         })
+        
+        // If no images are marked as featured, fall back to first few images from categories
+        if (featured.length === 0) {
+          portfolioConfig.categories.forEach(category => {
+            if (category.images.length > 0) {
+              // Get all images in this category with their ordering information
+              const categoryImageData = category.images.map(imageName => {
+                const imageConfig = portfolioConfig.images[imageName]
+                if (imageConfig) {
+                  return {
+                    filename: imageName,
+                    url: constructImageUrl(imageConfig.filename),
+                    categoryOrder: imageConfig.categoryOrders?.[category.id] ?? imageConfig.order
+                  }
+                }
+                return null
+              }).filter(Boolean) as Array<{
+                filename: string
+                url: string
+                categoryOrder: number
+              }>
+              
+              // Sort by category-specific order
+              categoryImageData.sort((a, b) => a.categoryOrder - b.categoryOrder)
+              
+              // Take up to 3 images from each category for the featured gallery as fallback
+              const imagesToTake = Math.min(3, categoryImageData.length)
+              for (let i = 0; i < imagesToTake; i++) {
+                featured.push(categoryImageData[i].url)
+              }
+            }
+          })
+        }
         
         setFeaturedImages(featured)
         
@@ -67,7 +92,10 @@ const Home = () => {
         <Gallery images={featuredImages} />
       ) : (
         <div className="no-images">
-          <p>No images available</p>
+          <p>No featured images available</p>
+          <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>
+            Images can be marked as featured through the admin interface
+          </p>
         </div>
       )}
     </div>

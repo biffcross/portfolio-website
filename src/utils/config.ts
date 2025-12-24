@@ -5,7 +5,8 @@ export interface SiteConfig {
   title: string
   description: string
   instagram: string
-  domain: string
+  domain?: string
+  email?: string
 }
 
 export interface CategoryConfig {
@@ -17,14 +18,13 @@ export interface CategoryConfig {
 
 export interface ImageConfig {
   filename: string
-  caption: string
-  category: string
+  categories: string[]
   order: number
-  dimensions: {
-    width: number
-    height: number
-  }
+  categoryOrders?: Record<string, number> // Per-category ordering
   uploadDate: string
+  is_featured: boolean
+  // Legacy support for migration
+  category?: string
 }
 
 export interface EasterEggConfig {
@@ -46,8 +46,7 @@ export function isSiteConfig(obj: any): obj is SiteConfig {
     obj !== null &&
     typeof obj.title === 'string' &&
     typeof obj.description === 'string' &&
-    typeof obj.instagram === 'string' &&
-    typeof obj.domain === 'string'
+    typeof obj.instagram === 'string'
   )
 }
 
@@ -68,14 +67,12 @@ export function isImageConfig(obj: any): obj is ImageConfig {
     typeof obj === 'object' &&
     obj !== null &&
     typeof obj.filename === 'string' &&
-    typeof obj.caption === 'string' &&
-    typeof obj.category === 'string' &&
+    (Array.isArray(obj.categories) && obj.categories.every((cat: any) => typeof cat === 'string')) &&
     typeof obj.order === 'number' &&
-    typeof obj.dimensions === 'object' &&
-    obj.dimensions !== null &&
-    typeof obj.dimensions.width === 'number' &&
-    typeof obj.dimensions.height === 'number' &&
-    typeof obj.uploadDate === 'string'
+    typeof obj.uploadDate === 'string' &&
+    typeof obj.is_featured === 'boolean' &&
+    // Legacy support - either categories array or category string should exist
+    (obj.categories || obj.category)
   )
 }
 
@@ -157,16 +154,27 @@ export function validateImageConfig(config: ImageConfig): string[] {
     errors.push('Image filename cannot be empty')
   }
   
-  if (!config.category.trim()) {
-    errors.push('Image category cannot be empty')
+  // Handle both new categories array and legacy category string
+  if (config.categories) {
+    if (!Array.isArray(config.categories) || config.categories.length === 0) {
+      errors.push('Image categories must be a non-empty array')
+    } else {
+      config.categories.forEach((category, index) => {
+        if (!category || !category.trim()) {
+          errors.push(`Image category at index ${index} cannot be empty`)
+        }
+      })
+    }
+  } else if (config.category) {
+    if (!config.category.trim()) {
+      errors.push('Image category cannot be empty')
+    }
+  } else {
+    errors.push('Image must have either categories array or legacy category string')
   }
   
   if (config.order < 0) {
     errors.push('Image order must be a non-negative number')
-  }
-  
-  if (config.dimensions.width <= 0 || config.dimensions.height <= 0) {
-    errors.push('Image dimensions must be positive numbers')
   }
   
   // Basic date validation
@@ -206,10 +214,13 @@ export function validatePortfolioConfig(config: PortfolioConfig): string[] {
       errors.push(`Image ${filename}: filename property must match object key`)
     }
     
-    // Ensure image category exists
-    if (!categoryIds.has(imageConfig.category)) {
-      errors.push(`Image ${filename}: references non-existent category '${imageConfig.category}'`)
-    }
+    // Ensure image categories exist (allow 'uncategorized' as a special case)
+    const imageCategories = imageConfig.categories || (imageConfig.category ? [imageConfig.category] : [])
+    imageCategories.forEach(category => {
+      if (category !== 'uncategorized' && !categoryIds.has(category)) {
+        errors.push(`Image ${filename}: references non-existent category '${category}'`)
+      }
+    })
   })
   
   // Validate that category images reference existing image objects
@@ -225,6 +236,37 @@ export function validatePortfolioConfig(config: PortfolioConfig): string[] {
 }
 
 // Configuration loading and parsing utilities
+
+/**
+ * Migrate legacy single-category configuration to multi-category format
+ */
+export function migrateConfigurationToMultiCategory(config: any): PortfolioConfig {
+  // If already migrated, return as-is
+  if (config.images && Object.values(config.images).every((img: any) => img.categories && img.is_featured !== undefined)) {
+    return config as PortfolioConfig
+  }
+
+  // Create migrated configuration
+  const migratedConfig = { ...config }
+  
+  // Migrate images from single category to categories array and add is_featured property
+  if (migratedConfig.images) {
+    Object.keys(migratedConfig.images).forEach(filename => {
+      const image = migratedConfig.images[filename]
+      if (image.category && !image.categories) {
+        // Migrate single category to categories array
+        image.categories = [image.category]
+        // Keep legacy category field for backward compatibility during transition
+      }
+      // Add is_featured property with default value of false for existing images
+      if (image.is_featured === undefined) {
+        image.is_featured = false
+      }
+    })
+  }
+
+  return migratedConfig as PortfolioConfig
+}
 
 export class ConfigurationError extends Error {
   constructor(message: string, public validationErrors?: string[]) {
@@ -245,8 +287,9 @@ const DEFAULT_CONFIG: PortfolioConfig = {
   site: {
     title: 'Biff Cross Photography',
     description: 'Professional photography portfolio',
-    instagram: 'https://instagram.com/biffcross',
-    domain: 'https://biffcrossphotography.co.uk'
+    instagram: 'https://www.instagram.com/biffxcross',
+    domain: 'https://biffcrossphotography.co.uk',
+    email: 'biffcross@hotmail.co.uk'
   },
   categories: [
     {
@@ -292,8 +335,16 @@ export async function loadPortfolioConfig(configPath?: string): Promise<Portfoli
     // Construct R2 URL for configuration file
     const configUrl = configPath || constructConfigUrl()
     
+    // Add cache-busting parameter to ensure fresh data
+    const cacheBustUrl = `${configUrl}?t=${Date.now()}`;
+    
     // Attempt to fetch the configuration file from R2
-    const response = await fetch(configUrl)
+    const response = await fetch(cacheBustUrl, {
+      cache: 'no-cache',
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    })
     
     if (!response.ok) {
       console.warn(`Failed to load configuration from ${configUrl}: ${response.status} ${response.statusText}`)
@@ -330,18 +381,21 @@ export function parsePortfolioConfig(configJson: string): PortfolioConfig {
     // Parse JSON
     const parsedConfig = JSON.parse(configJson)
     
+    // Migrate legacy configuration to multi-category format
+    const migratedConfig = migrateConfigurationToMultiCategory(parsedConfig)
+    
     // Validate structure using type guard
-    if (!isPortfolioConfig(parsedConfig)) {
+    if (!isPortfolioConfig(migratedConfig)) {
       throw new ConfigurationError('Configuration does not match expected schema')
     }
     
     // Perform detailed validation
-    const validationErrors = validatePortfolioConfig(parsedConfig)
+    const validationErrors = validatePortfolioConfig(migratedConfig)
     if (validationErrors.length > 0) {
       throw new ConfigurationError('Configuration validation failed', validationErrors)
     }
     
-    return parsedConfig
+    return migratedConfig
     
   } catch (error) {
     if (error instanceof SyntaxError) {

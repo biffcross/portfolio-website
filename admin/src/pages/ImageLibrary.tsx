@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import FileUploader from '../components/FileUploader'
+import CategoryTags from '../components/CategoryTags'
 import { useConfigurationManager } from '../hooks/useConfigurationManager'
+import { useElectronR2 } from '../hooks/useElectronR2'
 import type { UploadResult } from '../services/r2Service'
 
 interface FileUploadProgress {
@@ -14,36 +17,25 @@ interface FileUploadProgress {
 interface ImageWithMetadata {
   filename: string
   url: string
-  caption: string
-  description?: string
-  category: string
+  categories: string[]
   order: number
-  dimensions: { width: number; height: number }
+  categoryOrders?: Record<string, number>
   uploadDate: string
-}
-
-interface DragState {
-  isDragging: boolean
-  draggedImage: string | null
-  dragOverImage: string | null
+  is_featured: boolean
+  // Legacy support for migration
+  category?: string
 }
 
 function ImageLibrary() {
+  const [searchParams] = useSearchParams()
   const [showUploader, setShowUploader] = useState(false)
-  const [selectedCategory, setSelectedCategory] = useState<string>('uncategorized')
-  const [editingImage, setEditingImage] = useState<string | null>(null)
-  const [editCaption, setEditCaption] = useState('')
-  const [editDescription, setEditDescription] = useState('')
-  const [showMetadataModal, setShowMetadataModal] = useState(false)
-  const [editingMetadata, setEditingMetadata] = useState<ImageWithMetadata | null>(null)
-  const [dragState, setDragState] = useState<DragState>({
-    isDragging: false,
-    draggedImage: null,
-    dragOverImage: null
-  })
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null)
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set())
   const [showBatchActions, setShowBatchActions] = useState(false)
-  // const dragCounter = useRef(0) // Unused for now
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
   
   const {
     config,
@@ -53,56 +45,108 @@ function ImageLibrary() {
     saveConfiguration
   } = useConfigurationManager()
 
+  const { deleteFile, deleteFiles } = useElectronR2()
+
+  // Helper function to get category-specific order
+  const getCategoryOrder = (image: ImageWithMetadata, categoryId: string): number => {
+    if (image.categoryOrders && image.categoryOrders[categoryId] !== undefined) {
+      return image.categoryOrders[categoryId]
+    }
+    // Fallback to global order for legacy images
+    return image.order
+  }
+
+  // Helper function to get images sorted by category order
+  const getImagesSortedByCategory = (categoryId: string): ImageWithMetadata[] => {
+    return allImages
+      .filter(img => img.categories.includes(categoryId))
+      .sort((a, b) => getCategoryOrder(a, categoryId) - getCategoryOrder(b, categoryId))
+  }
+
   // Load configuration on mount
   useEffect(() => {
-    loadConfiguration()
+    const loadAndResetState = async () => {
+      await loadConfiguration()
+      setHasUnsavedChanges(false) // Reset unsaved changes only after loading from server
+    }
+    loadAndResetState()
   }, [loadConfiguration])
+
+  // Handle URL filter parameter
+  useEffect(() => {
+    const filterParam = searchParams.get('filter')
+    if (filterParam === 'featured') {
+      setSelectedCategory('featured')
+    } else if (filterParam && config?.categories.some(cat => cat.id === filterParam)) {
+      // Set category filter if it's a valid category ID
+      setSelectedCategory(filterParam)
+    }
+  }, [searchParams, config])
 
   // Get all images from configuration
   const allImages: ImageWithMetadata[] = config ? 
     Object.entries(config.images).map(([filename, metadata]) => ({
-      ...metadata,
       filename,
-      url: `${import.meta.env.VITE_R2_PUBLIC_URL}/${filename}`
+      url: `${import.meta.env.VITE_R2_PUBLIC_URL}/images/${filename}`,
+      categories: metadata.categories || (metadata.category ? [metadata.category] : []),
+      order: metadata.order,
+      categoryOrders: metadata.categoryOrders,
+      uploadDate: metadata.uploadDate,
+      is_featured: metadata.is_featured || false,
+      // Keep legacy category for backward compatibility during transition
+      category: metadata.category
     })) : []
 
-  // Filter images by selected category
+  // Filter images by selected category and sort by category-specific order
   const filteredImages = selectedCategory === 'all' 
-    ? allImages 
-    : allImages.filter(img => img.category === selectedCategory)
+    ? allImages.sort((a, b) => a.order - b.order) // Global order for 'all' view
+    : selectedCategory === 'featured'
+    ? allImages
+        .filter(img => img.is_featured)
+        .sort((a, b) => a.order - b.order) // Global order for featured images
+    : selectedCategory === 'uncategorized'
+    ? allImages
+        .filter(img => img.categories.length === 0 || (img.categories.length === 1 && img.categories[0] === 'uncategorized'))
+        .sort((a, b) => a.order - b.order) // Global order for uncategorized
+    : getImagesSortedByCategory(selectedCategory) // Category-specific order
 
   // Get available categories
   const categories = config ? [
     { id: 'all', name: 'All Images' },
+    { id: 'featured', name: 'Featured Images' },
     { id: 'uncategorized', name: 'Uncategorized' },
     ...config.categories.map(cat => ({ id: cat.id, name: cat.name }))
   ] : []
 
-  const handleFilesSelected = (files: File[]) => {
-    console.log('Files selected:', files.map(f => f.name))
+  const handleFilesSelected = (_files: File[]) => {
+    // Files selected for upload
   }
 
-  const handleUploadProgress = (progress: FileUploadProgress[]) => {
-    console.log('Upload progress:', progress)
+  const handleUploadProgress = (_progress: FileUploadProgress[]) => {
+    // Upload progress tracking
   }
 
   const handleUploadComplete = async (results: UploadResult[]) => {
     if (!config) return
 
-    console.log('Upload completed:', results)
+    // Validate that we have successful upload results
+    if (!results || results.length === 0) return
+
+    // Validate that all results have the required properties
+    const validResults = results.filter(result => result.key && result.url && result.size !== undefined)
+    if (validResults.length !== results.length) return
 
     // Add uploaded images to configuration
     const newImages: Record<string, any> = {}
     
     results.forEach((result, index) => {
       const filename = result.key.split('/').pop() || result.key
+      const imageCategory = selectedCategory === 'all' ? 'uncategorized' : selectedCategory
+      
       newImages[filename] = {
         filename,
-        caption: '',
-        description: '',
-        category: selectedCategory === 'all' ? 'uncategorized' : selectedCategory,
+        categories: imageCategory === 'uncategorized' ? [] : [imageCategory],
         order: Object.keys(config.images).length + index + 1,
-        dimensions: { width: 0, height: 0 }, // TODO: Extract from image
         uploadDate: new Date().toISOString()
       }
     })
@@ -116,49 +160,117 @@ function ImageLibrary() {
       }
     }
 
-    // Update categories to include new images
-    const updatedCategories = config.categories.map(category => {
-      if (category.id === selectedCategory || (selectedCategory === 'all' && category.id === 'uncategorized')) {
-        const categoryImages = results.map(result => result.key.split('/').pop() || result.key)
-        return {
-          ...category,
-          images: [...category.images, ...categoryImages]
-        }
-      }
-      return category
-    })
+    // Update categories to include new images (only if not uncategorized)
+    const targetCategory = selectedCategory === 'all' ? 'uncategorized' : selectedCategory
+    const updatedCategories = targetCategory === 'uncategorized' 
+      ? config.categories // Don't modify categories for uncategorized images
+      : config.categories.map(category => {
+          if (category.id === targetCategory) {
+            const categoryImages = results.map(result => result.key.split('/').pop() || result.key)
+            return {
+              ...category,
+              images: [...category.images, ...categoryImages]
+            }
+          }
+          return category
+        })
 
     updateConfig({
-      ...updatedConfig,
+      images: updatedConfig.images,
       categories: updatedCategories
     })
 
-    // Save to R2
-    await saveConfiguration()
+    try {
+      // Save to R2 - pass the updated config directly to avoid state timing issues
+      const configToSave = {
+        ...updatedConfig,
+        categories: updatedCategories
+      }
+      const saveSuccess = await saveConfiguration(configToSave)
+      
+      // Show success message
+      if (saveSuccess) {
+        setUploadSuccess(`Successfully uploaded ${results.length} image${results.length !== 1 ? 's' : ''}!`)
+        setTimeout(() => setUploadSuccess(null), 5000) // Clear after 5 seconds
+      }
+    } catch (error) {
+      console.error('Error during save:', error)
+    }
     
-    // Close uploader
-    setShowUploader(false)
+    try {
+      // Reload configuration to show new images
+      await loadConfiguration()
+      setHasUnsavedChanges(false) // Reset after reload since upload auto-saves
+    } catch (error) {
+      console.error('Error during config reload:', error)
+    }
   }
 
-  const handleCategoryChange = (imageFilename: string, newCategory: string) => {
+  const handleFeaturedToggle = (imageFilename: string, is_featured: boolean) => {
     if (!config) return
 
-    // Update image category
+    // Update image featured status
     const updatedImages = {
       ...config.images,
       [imageFilename]: {
         ...config.images[imageFilename],
-        category: newCategory
+        is_featured
+      }
+    }
+
+    updateConfig({
+      images: updatedImages
+    })
+
+    // Mark as having unsaved changes
+    setHasUnsavedChanges(true)
+  }
+
+  const handleBatchFeaturedToggle = (is_featured: boolean) => {
+    if (!config || selectedImages.size === 0) return
+
+    const updatedImages = { ...config.images }
+
+    // Update each selected image
+    selectedImages.forEach(imageFilename => {
+      updatedImages[imageFilename] = {
+        ...updatedImages[imageFilename],
+        is_featured
+      }
+    })
+
+    updateConfig({
+      images: updatedImages
+    })
+
+    setHasUnsavedChanges(true)
+    setSelectedImages(new Set())
+    setShowBatchActions(false)
+  }
+
+  const handleCategoriesChange = (imageFilename: string, newCategories: string[]) => {
+    if (!config) return
+
+    // Get current image
+    const currentImage = config.images[imageFilename]
+    if (!currentImage) return
+
+    // Update image categories
+    const updatedImages = {
+      ...config.images,
+      [imageFilename]: {
+        ...config.images[imageFilename],
+        categories: [...newCategories]
       }
     }
 
     // Update category image lists
     const updatedCategories = config.categories.map(category => {
-      // Remove from old category
+      // Remove from all categories first
       const imagesWithoutCurrent = category.images.filter(img => img !== imageFilename)
       
-      // Add to new category if this is the target
-      if (category.id === newCategory) {
+      // Add to new categories if this category is in the new list
+      if (newCategories.includes(category.id)) {
         return {
           ...category,
           images: [...imagesWithoutCurrent, imageFilename]
@@ -175,72 +287,9 @@ function ImageLibrary() {
       images: updatedImages,
       categories: updatedCategories
     })
-  }
 
-  const handleCaptionEdit = (imageFilename: string) => {
-    if (!config) return
-    
-    setEditingImage(imageFilename)
-    setEditCaption(config.images[imageFilename]?.caption || '')
-  }
-
-  const handleCaptionSave = async (imageFilename: string) => {
-    if (!config) return
-
-    const updatedImages = {
-      ...config.images,
-      [imageFilename]: {
-        ...config.images[imageFilename],
-        caption: editCaption
-      }
-    }
-
-    updateConfig({ images: updatedImages })
-    await saveConfiguration()
-    
-    setEditingImage(null)
-    setEditCaption('')
-  }
-
-  const handleCaptionCancel = () => {
-    setEditingImage(null)
-    setEditCaption('')
-  }
-
-  // Enhanced metadata editing
-  const handleOpenMetadataModal = (image: ImageWithMetadata) => {
-    setEditingMetadata(image)
-    setEditCaption(image.caption || '')
-    setEditDescription(image.description || '')
-    setShowMetadataModal(true)
-  }
-
-  const handleSaveMetadata = async () => {
-    if (!config || !editingMetadata) return
-
-    const updatedImages = {
-      ...config.images,
-      [editingMetadata.filename]: {
-        ...config.images[editingMetadata.filename],
-        caption: editCaption,
-        description: editDescription
-      }
-    }
-
-    updateConfig({ images: updatedImages })
-    await saveConfiguration()
-    
-    setShowMetadataModal(false)
-    setEditingMetadata(null)
-    setEditCaption('')
-    setEditDescription('')
-  }
-
-  const handleCancelMetadata = () => {
-    setShowMetadataModal(false)
-    setEditingMetadata(null)
-    setEditCaption('')
-    setEditDescription('')
+    // Mark as having unsaved changes
+    setHasUnsavedChanges(true)
   }
 
   // Order management within category
@@ -248,27 +297,46 @@ function ImageLibrary() {
     if (!config) return
 
     const image = config.images[imageFilename]
-    if (!image || image.order <= 1) return
+    if (!image) return
 
-    // Find the image with order - 1 in the same category
-    const categoryImages = Object.entries(config.images)
-      .filter(([_, img]) => img.category === image.category)
-      .sort((a, b) => a[1].order - b[1].order)
+    // Get the primary category (first category in the array, or legacy category)
+    const primaryCategory = image.categories?.[0] || image.category
+    if (!primaryCategory) return
 
-    const currentIndex = categoryImages.findIndex(([filename]) => filename === imageFilename)
+    // Get images sorted by category order
+    const categoryImages = getImagesSortedByCategory(primaryCategory)
+    const currentIndex = categoryImages.findIndex(img => img.filename === imageFilename)
+    
     if (currentIndex <= 0) return
 
-    const [prevFilename, prevImage] = categoryImages[currentIndex - 1]
+    const currentImage = categoryImages[currentIndex]
+    const prevImage = categoryImages[currentIndex - 1]
     
-    // Swap orders
-    const updatedImages = {
-      ...config.images,
-      [imageFilename]: { ...image, order: prevImage.order },
-      [prevFilename]: { ...prevImage, order: image.order }
+    // Swap category orders
+    const updatedImages = { ...config.images }
+    
+    // Update current image's category order
+    const currentCategoryOrders = currentImage.categoryOrders ? { ...currentImage.categoryOrders } : {}
+    const prevCategoryOrders = prevImage.categoryOrders ? { ...prevImage.categoryOrders } : {}
+    
+    const currentOrder = getCategoryOrder(currentImage, primaryCategory)
+    const prevOrder = getCategoryOrder(prevImage, primaryCategory)
+    
+    currentCategoryOrders[primaryCategory] = prevOrder
+    prevCategoryOrders[primaryCategory] = currentOrder
+    
+    updatedImages[imageFilename] = {
+      ...updatedImages[imageFilename],
+      categoryOrders: currentCategoryOrders
+    }
+    
+    updatedImages[prevImage.filename] = {
+      ...updatedImages[prevImage.filename],
+      categoryOrders: prevCategoryOrders
     }
 
     updateConfig({ images: updatedImages })
-    await saveConfiguration()
+    setHasUnsavedChanges(true)
   }
 
   const handleMoveImageDown = async (imageFilename: string) => {
@@ -277,135 +345,71 @@ function ImageLibrary() {
     const image = config.images[imageFilename]
     if (!image) return
 
-    // Find the image with order + 1 in the same category
-    const categoryImages = Object.entries(config.images)
-      .filter(([_, img]) => img.category === image.category)
-      .sort((a, b) => a[1].order - b[1].order)
+    // Get the primary category (first category in the array, or legacy category)
+    const primaryCategory = image.categories?.[0] || image.category
+    if (!primaryCategory) return
 
-    const currentIndex = categoryImages.findIndex(([filename]) => filename === imageFilename)
+    // Get images sorted by category order
+    const categoryImages = getImagesSortedByCategory(primaryCategory)
+    const currentIndex = categoryImages.findIndex(img => img.filename === imageFilename)
+    
     if (currentIndex >= categoryImages.length - 1) return
 
-    const [nextFilename, nextImage] = categoryImages[currentIndex + 1]
+    const currentImage = categoryImages[currentIndex]
+    const nextImage = categoryImages[currentIndex + 1]
     
-    // Swap orders
-    const updatedImages = {
-      ...config.images,
-      [imageFilename]: { ...image, order: nextImage.order },
-      [nextFilename]: { ...nextImage, order: image.order }
+    // Swap category orders
+    const updatedImages = { ...config.images }
+    
+    // Update current image's category order
+    const currentCategoryOrders = currentImage.categoryOrders ? { ...currentImage.categoryOrders } : {}
+    const nextCategoryOrders = nextImage.categoryOrders ? { ...nextImage.categoryOrders } : {}
+    
+    const currentOrder = getCategoryOrder(currentImage, primaryCategory)
+    const nextOrder = getCategoryOrder(nextImage, primaryCategory)
+    
+    currentCategoryOrders[primaryCategory] = nextOrder
+    nextCategoryOrders[primaryCategory] = currentOrder
+    
+    updatedImages[imageFilename] = {
+      ...updatedImages[imageFilename],
+      categoryOrders: currentCategoryOrders
+    }
+    
+    updatedImages[nextImage.filename] = {
+      ...updatedImages[nextImage.filename],
+      categoryOrders: nextCategoryOrders
     }
 
     updateConfig({ images: updatedImages })
-    await saveConfiguration()
+    setHasUnsavedChanges(true)
+  }
+
+  const handleSaveChanges = async () => {
+    if (!config || !hasUnsavedChanges) return
+
+    setIsSaving(true)
+    setSaveSuccess(null)
+
+    try {
+      const success = await saveConfiguration(config)
+      
+      if (success) {
+        setHasUnsavedChanges(false)
+        setSaveSuccess('All changes saved successfully!')
+        setTimeout(() => setSaveSuccess(null), 5000) // Clear after 5 seconds
+      } else {
+        alert('Failed to save changes. Please try again.')
+      }
+    } catch (error) {
+      console.error('Error saving changes:', error)
+      alert('Failed to save changes. Please try again.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   // Batch metadata operations
-  const handleBatchSetCaption = async (caption: string) => {
-    if (!config || selectedImages.size === 0) return
-
-    const updatedImages = { ...config.images }
-    selectedImages.forEach(imageFilename => {
-      updatedImages[imageFilename] = {
-        ...updatedImages[imageFilename],
-        caption
-      }
-    })
-
-    updateConfig({ images: updatedImages })
-    await saveConfiguration()
-    setSelectedImages(new Set())
-  }
-
-  const handleBatchSetDescription = async (description: string) => {
-    if (!config || selectedImages.size === 0) return
-
-    const updatedImages = { ...config.images }
-    selectedImages.forEach(imageFilename => {
-      updatedImages[imageFilename] = {
-        ...updatedImages[imageFilename],
-        description
-      }
-    })
-
-    updateConfig({ images: updatedImages })
-    await saveConfiguration()
-    setSelectedImages(new Set())
-  }
-
-  // Drag and drop handlers
-  const handleDragStart = (e: React.DragEvent, imageFilename: string) => {
-    e.dataTransfer.setData('text/plain', imageFilename)
-    setDragState(prev => ({
-      ...prev,
-      isDragging: true,
-      draggedImage: imageFilename
-    }))
-  }
-
-  const handleDragEnd = () => {
-    setDragState({
-      isDragging: false,
-      draggedImage: null,
-      dragOverImage: null
-    })
-  }
-
-  const handleDragOver = (e: React.DragEvent, targetImage: string) => {
-    e.preventDefault()
-    setDragState(prev => ({
-      ...prev,
-      dragOverImage: targetImage
-    }))
-  }
-
-  const handleDragLeave = () => {
-    setDragState(prev => ({
-      ...prev,
-      dragOverImage: null
-    }))
-  }
-
-  const handleDrop = async (e: React.DragEvent, targetImage: string) => {
-    e.preventDefault()
-    const draggedImage = e.dataTransfer.getData('text/plain')
-    
-    if (draggedImage && draggedImage !== targetImage && config) {
-      // Reorder images within the same category
-      const draggedImageData = config.images[draggedImage]
-      const targetImageData = config.images[targetImage]
-      
-      if (draggedImageData && targetImageData && draggedImageData.category === targetImageData.category) {
-        // Get all images in the category
-        const categoryImages = Object.entries(config.images)
-          .filter(([_, img]) => img.category === draggedImageData.category)
-          .sort((a, b) => a[1].order - b[1].order)
-        
-        // Find positions
-        const draggedIndex = categoryImages.findIndex(([filename]) => filename === draggedImage)
-        const targetIndex = categoryImages.findIndex(([filename]) => filename === targetImage)
-        
-        if (draggedIndex !== -1 && targetIndex !== -1) {
-          // Reorder the array
-          const reorderedImages = [...categoryImages]
-          const [draggedItem] = reorderedImages.splice(draggedIndex, 1)
-          reorderedImages.splice(targetIndex, 0, draggedItem)
-          
-          // Update order values
-          const updatedImages = { ...config.images }
-          reorderedImages.forEach(([filename], index) => {
-            updatedImages[filename] = {
-              ...updatedImages[filename],
-              order: index + 1
-            }
-          })
-          
-          updateConfig({ images: updatedImages })
-          await saveConfiguration()
-        }
-      }
-    }
-    
-    handleDragEnd()
-  }
 
   // Batch operations
   const handleImageSelect = (imageFilename: string, selected: boolean) => {
@@ -441,14 +445,16 @@ function ImageLibrary() {
     selectedImages.forEach(imageFilename => {
       updatedImages[imageFilename] = {
         ...updatedImages[imageFilename],
-        category: newCategory
+        categories: newCategory === 'uncategorized' ? [] : [newCategory]
       }
     })
 
-    // Add images to new category
-    const targetCategoryIndex = updatedCategories.findIndex(cat => cat.id === newCategory)
-    if (targetCategoryIndex !== -1) {
-      updatedCategories[targetCategoryIndex].images.push(...Array.from(selectedImages))
+    // Add images to new category (only if it's not 'uncategorized')
+    if (newCategory !== 'uncategorized') {
+      const targetCategoryIndex = updatedCategories.findIndex(cat => cat.id === newCategory)
+      if (targetCategoryIndex !== -1) {
+        updatedCategories[targetCategoryIndex].images.push(...Array.from(selectedImages))
+      }
     }
 
     updateConfig({
@@ -456,9 +462,67 @@ function ImageLibrary() {
       categories: updatedCategories
     })
 
-    await saveConfiguration()
+    setHasUnsavedChanges(true)
     setSelectedImages(new Set())
     setShowBatchActions(false)
+  }
+
+  const handleDeleteImage = async (imageFilename: string) => {
+    if (!config) return
+    
+    if (!confirm(`Are you sure you want to delete "${imageFilename}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      // Delete from R2 storage first
+      const imageKey = `images/${imageFilename}`
+      const deleteSuccess = await deleteFile(imageKey)
+      
+      if (!deleteSuccess) {
+        alert('Failed to delete image from storage. Please try again.')
+        return
+      }
+
+      // Remove from configuration
+      const updatedImages = { ...config.images }
+      const updatedCategories = config.categories.map(category => ({
+        ...category,
+        images: category.images.filter(img => img !== imageFilename)
+      }))
+
+      // Remove the image
+      delete updatedImages[imageFilename]
+
+      const updatedConfig = {
+        ...config,
+        images: updatedImages,
+        categories: updatedCategories
+      }
+
+      updateConfig({
+        images: updatedImages,
+        categories: updatedCategories
+      })
+
+      // Pass the updated config directly to ensure it's saved
+      console.log('Saving updated config after single image deletion:', {
+        deletedImage: imageFilename,
+        remainingImages: Object.keys(updatedImages).length,
+        categories: updatedCategories.map(cat => ({ id: cat.id, imageCount: cat.images.length }))
+      })
+      const saveSuccess = await saveConfiguration(updatedConfig)
+      
+      if (saveSuccess) {
+        console.log('Configuration saved successfully after single image deletion')
+      } else {
+        console.error('Failed to save configuration after single image deletion')
+        alert('Image deleted from storage but failed to update configuration. Please refresh the page.')
+      }
+    } catch (error) {
+      console.error('Error deleting image:', error)
+      alert('Failed to delete image. Please try again.')
+    }
   }
 
   const handleBatchDelete = async () => {
@@ -468,25 +532,61 @@ function ImageLibrary() {
       return
     }
 
-    const updatedImages = { ...config.images }
-    const updatedCategories = config.categories.map(category => ({
-      ...category,
-      images: category.images.filter(img => !selectedImages.has(img))
-    }))
+    try {
+      // Delete from R2 storage first
+      const imageKeys = Array.from(selectedImages).map(filename => `images/${filename}`)
+      const deleteResults = await deleteFiles(imageKeys)
+      
+      if (deleteResults.failed.length > 0) {
+        const failedFilenames = deleteResults.failed.map((f: { key: string, error: string }) => f.key.replace('images/', ''))
+        alert(`Failed to delete some images from storage: ${failedFilenames.join(', ')}`)
+        return
+      }
 
-    // Remove selected images
-    selectedImages.forEach(imageFilename => {
-      delete updatedImages[imageFilename]
-    })
+      // Remove from configuration
+      const updatedImages = { ...config.images }
+      const updatedCategories = config.categories.map(category => ({
+        ...category,
+        images: category.images.filter(img => !selectedImages.has(img))
+      }))
 
-    updateConfig({
-      images: updatedImages,
-      categories: updatedCategories
-    })
+      // Remove selected images
+      selectedImages.forEach(imageFilename => {
+        delete updatedImages[imageFilename]
+      })
 
-    await saveConfiguration()
-    setSelectedImages(new Set())
-    setShowBatchActions(false)
+      const updatedConfig = {
+        ...config,
+        images: updatedImages,
+        categories: updatedCategories
+      }
+
+      updateConfig({
+        images: updatedImages,
+        categories: updatedCategories
+      })
+
+      // Pass the updated config directly to ensure it's saved
+      console.log('Saving updated config after batch deletion:', {
+        deletedImages: Array.from(selectedImages),
+        remainingImages: Object.keys(updatedImages).length,
+        categories: updatedCategories.map(cat => ({ id: cat.id, imageCount: cat.images.length }))
+      })
+      const saveSuccess = await saveConfiguration(updatedConfig)
+      
+      if (saveSuccess) {
+        console.log('Configuration saved successfully after batch deletion')
+      } else {
+        console.error('Failed to save configuration after batch deletion')
+        alert('Images deleted from storage but failed to update configuration. Please refresh the page.')
+      }
+      
+      setSelectedImages(new Set())
+      setShowBatchActions(false)
+    } catch (error) {
+      console.error('Error deleting images:', error)
+      alert('Failed to delete images. Please try again.')
+    }
   }
 
   // Toggle batch actions mode
@@ -509,6 +609,42 @@ function ImageLibrary() {
     <div>
       <h1 className="page-title">Image Library</h1>
       
+      {/* Upload Success Message */}
+      {uploadSuccess && (
+        <div style={{ 
+          padding: '1rem', 
+          marginBottom: '1.5rem',
+          backgroundColor: '#d4edda', 
+          border: '1px solid #c3e6cb',
+          borderRadius: '6px',
+          color: '#155724',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
+        }}>
+          <span style={{ fontSize: '1.2rem' }}>✓</span>
+          <strong>{uploadSuccess}</strong>
+        </div>
+      )}
+
+      {/* Save Success Message */}
+      {saveSuccess && (
+        <div style={{ 
+          padding: '1rem', 
+          marginBottom: '1.5rem',
+          backgroundColor: '#d4edda', 
+          border: '1px solid #c3e6cb',
+          borderRadius: '6px',
+          color: '#155724',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem'
+        }}>
+          <span style={{ fontSize: '1.2rem' }}>✓</span>
+          <strong>{saveSuccess}</strong>
+        </div>
+      )}
+      
       {showUploader ? (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
@@ -519,7 +655,7 @@ function ImageLibrary() {
                   Upload to category:
                 </label>
                 <select 
-                  value={selectedCategory}
+                  value={selectedCategory === 'all' ? 'uncategorized' : selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   style={{
                     padding: '0.5rem',
@@ -540,7 +676,7 @@ function ImageLibrary() {
               className="btn btn-secondary" 
               onClick={() => setShowUploader(false)}
             >
-              Cancel
+              Back to Image Library
             </button>
           </div>
           <FileUploader 
@@ -558,6 +694,16 @@ function ImageLibrary() {
                   {selectedCategory === 'all' ? 'All Images' : 
                    categories.find(c => c.id === selectedCategory)?.name || 'Images'} 
                   ({filteredImages.length})
+                  {hasUnsavedChanges && (
+                    <span style={{ 
+                      marginLeft: '0.5rem', 
+                      fontSize: '0.8rem', 
+                      color: '#dc3545',
+                      fontWeight: 'normal'
+                    }}>
+                      • Unsaved changes
+                    </span>
+                  )}
                 </h3>
                 {filteredImages.length > 0 && (
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -606,12 +752,27 @@ function ImageLibrary() {
                 )}
               </div>
             </div>
-            <button 
-              className="btn" 
-              onClick={() => setShowUploader(true)}
-            >
-              Upload New Images
-            </button>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              {hasUnsavedChanges && (
+                <button 
+                  className="btn btn-success"
+                  onClick={handleSaveChanges}
+                  disabled={isSaving}
+                  style={{
+                    backgroundColor: '#28a745',
+                    borderColor: '#28a745'
+                  }}
+                >
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              )}
+              <button 
+                className="btn" 
+                onClick={() => setShowUploader(true)}
+              >
+                Upload New Images
+              </button>
+            </div>
           </div>
 
           {/* Batch Actions Bar */}
@@ -651,6 +812,20 @@ function ImageLibrary() {
                 ))}
               </select>
               <button 
+                className="btn btn-warning"
+                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem', backgroundColor: '#ffc107', borderColor: '#ffc107', color: '#212529' }}
+                onClick={() => handleBatchFeaturedToggle(true)}
+              >
+                ⭐ Mark as Featured
+              </button>
+              <button 
+                className="btn btn-secondary"
+                style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                onClick={() => handleBatchFeaturedToggle(false)}
+              >
+                Remove Featured
+              </button>
+              <button 
                 className="btn btn-danger"
                 style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
                 onClick={handleBatchDelete}
@@ -658,38 +833,7 @@ function ImageLibrary() {
                 Delete Selected
               </button>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  placeholder="Set caption for all selected..."
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                      handleBatchSetCaption(e.currentTarget.value.trim())
-                      e.currentTarget.value = ''
-                    }
-                  }}
-                  style={{
-                    padding: '0.5rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    width: '200px'
-                  }}
-                />
-                <input
-                  type="text"
-                  placeholder="Set description for all selected..."
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                      handleBatchSetDescription(e.currentTarget.value.trim())
-                      e.currentTarget.value = ''
-                    }
-                  }}
-                  style={{
-                    padding: '0.5rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    width: '200px'
-                  }}
-                />
+                {/* Caption input removed - no longer needed */}
               </div>
             </div>
           )}
@@ -699,34 +843,23 @@ function ImageLibrary() {
               <div className="grid grid-3" style={{ gap: '2rem' }}>
                 {filteredImages.map((image) => {
                   const isSelected = selectedImages.has(image.filename)
-                  const isDraggedOver = dragState.dragOverImage === image.filename
-                  const isDragging = dragState.draggedImage === image.filename
                   
                   return (
                     <div 
                       key={image.filename} 
                       className="image-card" 
-                      draggable={selectedCategory !== 'all'}
-                      onDragStart={(e) => handleDragStart(e, image.filename)}
-                      onDragEnd={handleDragEnd}
-                      onDragOver={(e) => handleDragOver(e, image.filename)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, image.filename)}
                       style={{
-                        border: `2px solid ${isDraggedOver ? '#007bff' : (isSelected ? '#28a745' : '#e0e0e0')}`,
+                        border: `2px solid ${isSelected ? '#28a745' : '#e0e0e0'}`,
                         borderRadius: '8px',
                         overflow: 'hidden',
                         background: '#fff',
-                        opacity: isDragging ? 0.5 : 1,
-                        transform: isDraggedOver ? 'scale(1.02)' : 'scale(1)',
-                        transition: 'all 0.2s ease',
-                        cursor: selectedCategory !== 'all' ? 'move' : 'default'
+                        transition: 'all 0.2s ease'
                       }}
                     >
                       <div style={{ position: 'relative' }}>
                         <img 
                           src={image.url} 
-                          alt={image.caption || image.filename}
+                          alt={image.filename}
                           style={{
                             width: '100%',
                             height: '200px',
@@ -749,33 +882,71 @@ function ImageLibrary() {
                             style={{ cursor: 'pointer' }}
                           />
                         </div>
-                        {/* Drag indicator */}
-                        {selectedCategory !== 'all' && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '0.5rem',
-                            right: '0.5rem',
-                            background: 'rgba(0, 0, 0, 0.7)',
-                            color: 'white',
-                            borderRadius: '4px',
-                            padding: '0.25rem 0.5rem',
-                            fontSize: '0.8rem'
-                          }}>
-                            ⋮⋮
-                          </div>
-                        )}
+                        {/* Featured star indicator and toggle */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '0.5rem',
+                          right: '0.5rem',
+                          background: 'rgba(255, 255, 255, 0.9)',
+                          borderRadius: '4px',
+                          padding: '0.25rem'
+                        }}>
+                          <button
+                            onClick={() => handleFeaturedToggle(image.filename, !image.is_featured)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '1.2rem',
+                              padding: '0.25rem',
+                              borderRadius: '4px',
+                              color: image.is_featured ? '#ffc107' : '#ccc',
+                              transition: 'color 0.2s ease'
+                            }}
+                            title={image.is_featured ? 'Remove from featured' : 'Mark as featured'}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.color = '#ffc107'
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.color = image.is_featured ? '#ffc107' : '#ccc'
+                            }}
+                          >
+                            ⭐
+                          </button>
+                        </div>
                       </div>
                     
                       <div style={{ padding: '1rem' }}>
                         <div style={{ marginBottom: '1rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
+                            <div style={{ flex: 1 }}>
                               <strong>{image.filename}</strong>
+                              {image.is_featured && (
+                                <span style={{ 
+                                  marginLeft: '0.5rem', 
+                                  fontSize: '0.8rem', 
+                                  color: '#ffc107',
+                                  fontWeight: 'bold'
+                                }}>
+                                  ⭐ Featured
+                                </span>
+                              )}
                               <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.25rem' }}>
                                 Uploaded: {new Date(image.uploadDate).toLocaleDateString()}
                               </div>
                               <div style={{ fontSize: '0.8rem', color: '#999', marginTop: '0.25rem' }}>
-                                Order: {image.order}
+                                {selectedCategory !== 'all' && selectedCategory !== 'uncategorized' ? (
+                                  <>Order in {config?.categories.find(cat => cat.id === selectedCategory)?.name}: {getCategoryOrder(image, selectedCategory)}</>
+                                ) : (
+                                  <>Global Order: {image.order}</>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                                <CategoryTags
+                                  categories={image.categories}
+                                  availableCategories={config?.categories || []}
+                                  onCategoriesChange={(newCategories) => handleCategoriesChange(image.filename, newCategories)}
+                                />
                               </div>
                             </div>
                             {selectedCategory !== 'all' && (
@@ -814,128 +985,37 @@ function ImageLibrary() {
                         </div>
                         
                         {/* Metadata preview and editing */}
-                        <div style={{ marginBottom: '1rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                            <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
-                              Metadata:
-                            </label>
-                            <button 
-                              className="btn btn-secondary"
-                              style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
-                              onClick={() => handleOpenMetadataModal(image)}
-                            >
-                              Edit All
-                            </button>
-                          </div>
-                          
-                          {editingImage === image.filename ? (
-                            <div>
-                              <textarea
-                                value={editCaption}
-                                onChange={(e) => setEditCaption(e.target.value)}
-                                placeholder="Caption..."
-                                rows={2}
-                                style={{
-                                  width: '100%',
-                                  padding: '0.5rem',
-                                  border: '1px solid #ddd',
-                                  borderRadius: '4px',
-                                  fontSize: '0.9rem',
-                                  resize: 'vertical'
-                                }}
-                              />
-                              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                <button 
-                                  className="btn"
-                                  style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
-                                  onClick={() => handleCaptionSave(image.filename)}
-                                >
-                                  Save
-                                </button>
-                                <button 
-                                  className="btn btn-secondary"
-                                  style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
-                                  onClick={handleCaptionCancel}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              <div 
-                                style={{ 
-                                  minHeight: '1.5rem', 
-                                  padding: '0.5rem',
-                                  background: '#f9f9f9',
-                                  border: '1px solid #eee',
-                                  borderRadius: '4px',
-                                  fontSize: '0.8rem',
-                                  cursor: 'pointer',
-                                  marginBottom: '0.5rem'
-                                }}
-                                onClick={() => handleCaptionEdit(image.filename)}
-                              >
-                                <strong>Caption:</strong> {image.caption || <em style={{ color: '#999' }}>Click to add...</em>}
-                              </div>
-                              {image.description && (
-                                <div style={{ 
-                                  padding: '0.5rem',
-                                  background: '#f9f9f9',
-                                  border: '1px solid #eee',
-                                  borderRadius: '4px',
-                                  fontSize: '0.8rem'
-                                }}>
-                                  <strong>Description:</strong> {image.description}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
                         
-                        {/* Category selection */}
-                        <div>
-                          <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                            Category:
-                          </label>
-                          <select 
-                            value={image.category}
-                            onChange={(e) => handleCategoryChange(image.filename, e.target.value)}
+                        {/* Delete button */}
+                        <div style={{ marginTop: '1rem' }}>
+                          <button
+                            onClick={() => handleDeleteImage(image.filename)}
                             style={{
                               width: '100%',
                               padding: '0.5rem',
-                              border: '1px solid #ddd',
+                              backgroundColor: '#dc3545',
+                              color: 'white',
+                              border: 'none',
                               borderRadius: '4px',
-                              fontSize: '0.9rem'
+                              cursor: 'pointer',
+                              fontSize: '0.9rem',
+                              fontWeight: 'bold'
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.backgroundColor = '#c82333'
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.backgroundColor = '#dc3545'
                             }}
                           >
-                            <option value="uncategorized">Uncategorized</option>
-                            {config?.categories.map(category => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
-                              </option>
-                            ))}
-                          </select>
+                            🗑️ Delete Image
+                          </button>
                         </div>
                       </div>
                     </div>
                   )
                 })}
               </div>
-              
-              {selectedCategory !== 'all' && filteredImages.length > 1 && (
-                <div style={{
-                  marginTop: '1rem',
-                  padding: '0.5rem',
-                  background: '#f8f9fa',
-                  borderRadius: '4px',
-                  fontSize: '0.9rem',
-                  color: '#666',
-                  textAlign: 'center'
-                }}>
-                  💡 Tip: Drag and drop images to reorder them within this category
-                </div>
-              )}
             </>
           ) : (
             <div style={{ 
@@ -953,117 +1033,6 @@ function ImageLibrary() {
               }
             </div>
           )}
-        </div>
-      )}
-
-      {/* Metadata Editing Modal */}
-      {showMetadataModal && editingMetadata && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'white',
-            borderRadius: '8px',
-            padding: '2rem',
-            maxWidth: '600px',
-            width: '90%',
-            maxHeight: '80vh',
-            overflow: 'auto'
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '1.5rem' }}>
-              Edit Metadata: {editingMetadata.filename}
-            </h3>
-            
-            <div style={{ marginBottom: '1.5rem' }}>
-              <img 
-                src={editingMetadata.url}
-                alt={editingMetadata.caption || editingMetadata.filename}
-                style={{
-                  width: '100%',
-                  maxHeight: '200px',
-                  objectFit: 'cover',
-                  borderRadius: '4px'
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Caption:
-              </label>
-              <textarea
-                value={editCaption}
-                onChange={(e) => setEditCaption(e.target.value)}
-                rows={3}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                  resize: 'vertical'
-                }}
-                placeholder="Enter a caption for this image..."
-              />
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Description:
-              </label>
-              <textarea
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                rows={4}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '1rem',
-                  resize: 'vertical'
-                }}
-                placeholder="Enter a detailed description for this image..."
-              />
-            </div>
-
-            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8f9fa', borderRadius: '4px' }}>
-              <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem' }}>Image Information:</h4>
-              <div style={{ fontSize: '0.8rem', color: '#666', lineHeight: '1.6' }}>
-                <div><strong>Filename:</strong> {editingMetadata.filename}</div>
-                <div><strong>Category:</strong> {editingMetadata.category}</div>
-                <div><strong>Order:</strong> {editingMetadata.order}</div>
-                <div><strong>Upload Date:</strong> {new Date(editingMetadata.uploadDate).toLocaleDateString()}</div>
-                {editingMetadata.dimensions.width > 0 && (
-                  <div><strong>Dimensions:</strong> {editingMetadata.dimensions.width} × {editingMetadata.dimensions.height}</div>
-                )}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-              <button 
-                className="btn btn-secondary"
-                onClick={handleCancelMetadata}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn"
-                onClick={handleSaveMetadata}
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>

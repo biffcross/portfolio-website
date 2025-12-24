@@ -213,7 +213,10 @@
 }
 
 .curtains-countdown {
-  margin: 2rem auto;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .christmas-scene {

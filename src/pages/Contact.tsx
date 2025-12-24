@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { loadPortfolioConfig, PortfolioConfig } from '../utils/config'
 
 const Contact = () => {
+  const [config, setConfig] = useState<PortfolioConfig | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -9,6 +11,18 @@ const Contact = () => {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitMessage, setSubmitMessage] = useState('')
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const portfolioConfig = await loadPortfolioConfig()
+        setConfig(portfolioConfig)
+      } catch (error) {
+        console.error('Failed to load portfolio config:', error)
+      }
+    }
+    loadConfig()
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -29,7 +43,7 @@ const Contact = () => {
       const body = encodeURIComponent(
         `Name: ${formData.name}\nEmail: ${formData.email}\n\nMessage:\n${formData.message}`
       )
-      const mailtoLink = `mailto:contact@biffcross.com?subject=${subject}&body=${body}`
+      const mailtoLink = `mailto:${config?.site.email || 'biffcross@hotmail.co.uk'}?subject=${subject}&body=${body}`
       
       // Open email client
       window.location.href = mailtoLink
@@ -127,10 +141,16 @@ const Contact = () => {
         <div className="contact-info">
           <h3>Get In Touch</h3>
           <p>
-            <strong>Email:</strong> <a href="mailto:contact@biffcross.com">contact@biffcross.com</a>
+            <strong>Email:</strong> <a href={`mailto:${config?.site.email || 'biffcross@hotmail.co.uk'}`}>
+              {config?.site.email || 'biffcross@hotmail.co.uk'}
+            </a>
           </p>
           <p>
-            <strong>Instagram:</strong> <a href="https://instagram.com/biffcross" target="_blank" rel="noopener noreferrer">@biffcross</a>
+            <strong>Instagram:</strong> {config?.site.instagram && (
+              <a href={config.site.instagram} target="_blank" rel="noopener noreferrer">
+                @{config.site.instagram.split('/').pop()}
+              </a>
+            )}
           </p>
           <p>
             <strong>Services:</strong> Sports Photography, Music Photography, Portraiture, Editorial, Film Photography

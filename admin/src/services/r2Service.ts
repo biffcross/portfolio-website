@@ -30,6 +30,7 @@ function validateR2Config(): R2Config {
   const secretAccessKey = import.meta.env.VITE_R2_SECRET_ACCESS_KEY;
   const publicUrl = import.meta.env.VITE_R2_PUBLIC_URL;
   const accountId = import.meta.env.VITE_R2_ACCOUNT_ID;
+  const bucketName = import.meta.env.VITE_R2_BUCKET_NAME;
 
   if (!accessKeyId) {
     throw new R2ConfigError('VITE_R2_ACCESS_KEY_ID environment variable is required');
@@ -47,21 +48,16 @@ function validateR2Config(): R2Config {
     throw new R2ConfigError('VITE_R2_ACCOUNT_ID environment variable is required');
   }
 
-  // Extract bucket name from public URL
-  // Format: https://pub-[bucket-id].r2.dev
-  const urlMatch = publicUrl.match(/https:\/\/pub-([^.]+)\.r2\.dev/);
-  if (!urlMatch) {
-    throw new R2ConfigError('Invalid VITE_R2_PUBLIC_URL format. Expected: https://pub-[bucket-id].r2.dev');
+  if (!bucketName) {
+    throw new R2ConfigError('VITE_R2_BUCKET_NAME environment variable is required');
   }
-
-  const bucketId = urlMatch[1];
   
   return {
     accessKeyId,
     secretAccessKey,
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     region: 'auto', // Cloudflare R2 uses 'auto' as region
-    bucketName: bucketId
+    bucketName
   };
 }
 
@@ -218,6 +214,74 @@ class R2Service {
     if (errors.length > 0) {
       const errorMessage = `Failed to upload ${errors.length} out of ${files.length} files`;
       throw new R2UploadError(errorMessage);
+    }
+
+    return results;
+  }
+
+  /**
+   * Delete a file from R2 storage
+   */
+  async deleteFile(key: string, maxRetries: number = 3): Promise<void> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Use fetch with DELETE method for R2 deletion
+        // Note: This requires proper CORS configuration on R2 bucket
+        const deleteUrl = `${this.config.endpoint}/${this.config.bucketName}/${key}`;
+        
+        const response = await fetch(deleteUrl, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `AWS4-HMAC-SHA256 Credential=${this.config.accessKeyId}/${new Date().toISOString().slice(0, 10)}/auto/s3/aws4_request`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return; // Success
+
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown deletion error');
+        
+        if (attempt === maxRetries) {
+          break;
+        }
+
+        // Exponential backoff: wait 2^attempt seconds before retry
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw new R2UploadError(
+      `Failed to delete file "${key}" after ${maxRetries} attempts: ${lastError?.message}`,
+      lastError || undefined
+    );
+  }
+
+  /**
+   * Delete multiple files from R2 storage
+   */
+  async deleteFiles(keys: string[], maxRetries: number = 3): Promise<{ success: string[], failed: { key: string, error: string }[] }> {
+    const results = {
+      success: [] as string[],
+      failed: [] as { key: string, error: string }[]
+    };
+
+    // Delete files sequentially to avoid overwhelming the service
+    for (const key of keys) {
+      try {
+        await this.deleteFile(key, maxRetries);
+        results.success.push(key);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        results.failed.push({ key, error: errorMessage });
+      }
     }
 
     return results;

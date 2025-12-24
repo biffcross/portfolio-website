@@ -132,7 +132,7 @@ export function createDefaultConfig(): PortfolioConfig {
     site: {
       title: "Biff Cross Photography",
       description: "Professional photography portfolio",
-      instagram: "https://instagram.com/biffcross"
+      instagram: "https://www.instagram.com/biffxcross"
     },
     categories: [
       {
