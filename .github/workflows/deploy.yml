@@ -35,12 +35,10 @@ jobs:
         run: |
           echo "VITE_CUSTOM_DOMAIN=${{ secrets.VITE_CUSTOM_DOMAIN }}" >> .env
           echo "VITE_R2_PUBLIC_URL=${{ secrets.VITE_R2_PUBLIC_URL }}" >> .env
-          echo "VITE_R2_ACCESS_KEY_ID=${{ secrets.VITE_R2_ACCESS_KEY_ID }}" >> .env
-          echo "VITE_R2_SECRET_ACCESS_KEY=${{ secrets.VITE_R2_SECRET_ACCESS_KEY }}" >> .env
-          echo "VITE_R2_API_TOKEN=${{ secrets.VITE_R2_API_TOKEN }}" >> .env
           
       - name: Build application
         env:
+          VITE_CUSTOM_DOMAIN: ${{ secrets.VITE_CUSTOM_DOMAIN }}
           VITE_R2_PUBLIC_URL: ${{ secrets.VITE_R2_PUBLIC_URL }}
         run: npm run build
         
