@@ -39,7 +39,8 @@ const requiredVars = [
   'VITE_R2_ACCESS_KEY_ID',
   'VITE_R2_SECRET_ACCESS_KEY', 
   'VITE_R2_PUBLIC_URL',
-  'VITE_R2_ACCOUNT_ID'
+  'VITE_R2_ACCOUNT_ID',
+  'VITE_R2_BUCKET_NAME'
 ];
 
 console.log('🔍 Validating required environment variables...');
@@ -64,7 +65,10 @@ console.log('✅ All required environment variables are present');
 try {
   // Run the standard build process
   console.log('🏗️  Building React app...');
-  execSync('npm run build', { stdio: 'inherit' });
+  execSync('npm run build', { 
+    stdio: 'inherit',
+    env: { ...process.env } // Ensure environment variables are passed
+  });
   
   console.log('🔧 Compiling Electron TypeScript...');
   execSync('tsc -p tsconfig.electron.json', { stdio: 'inherit' });
