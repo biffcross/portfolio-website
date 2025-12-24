@@ -36,7 +36,11 @@ const createWindow = (): void => {
     mainWindow.loadURL('http://localhost:8080');
     // DevTools can be opened manually via View menu or Cmd+Option+I / F12
   } else {
-    mainWindow.loadFile(join(__dirname, '../dist/index.html'));
+    // In production, load from the packaged dist folder
+    // Use app.getAppPath() for more reliable path resolution
+    const indexPath = join(app.getAppPath(), 'dist/index.html');
+    console.log('Loading index.html from:', indexPath);
+    mainWindow.loadFile(indexPath);
   }
 
   // Show window when ready to prevent visual flash
