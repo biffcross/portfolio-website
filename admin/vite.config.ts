@@ -11,4 +11,5 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
   },
+  base: './', // Use relative paths for Electron
 })

@@ -1,8 +1,9 @@
 {
   "name": "biff-cross-photography-admin",
   "private": true,
-  "version": "0.0.0",
-
+  "version": "1.0.0",
+  "description": "Admin interface for Biff Cross Photography portfolio management",
+  "author": "Biff Cross",
   "main": "dist-electron/main.js",
   "homepage": "./",
   "scripts": {
