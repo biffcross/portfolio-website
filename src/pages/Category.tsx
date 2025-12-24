@@ -30,14 +30,33 @@ const Category = ({ category }: CategoryProps) => {
         
         setCategoryData(foundCategory)
         
-        // Build image URLs from the category's image list
-        const imageUrls = foundCategory.images.map(imageName => {
+        // Build image URLs from the category's image list, sorted by category-specific order
+        const imageData = foundCategory.images.map(imageName => {
           const imageConfig = portfolioConfig.images[imageName]
           if (imageConfig) {
-            return constructImageUrl(imageConfig.filename)
+            return {
+              filename: imageName,
+              url: constructImageUrl(imageConfig.filename),
+              categoryOrder: imageConfig.categoryOrders?.[category] ?? imageConfig.order,
+              globalOrder: imageConfig.order
+            }
           }
           return null
-        }).filter(Boolean) as string[]
+        }).filter(Boolean) as Array<{
+          filename: string
+          url: string
+          categoryOrder: number
+          globalOrder: number
+        }>
+        
+        // Sort by category-specific order, fallback to global order
+        imageData.sort((a, b) => {
+          // Use category-specific order if available, otherwise fall back to global order
+          return a.categoryOrder - b.categoryOrder
+        })
+        
+        // Extract just the URLs for the Gallery component
+        const imageUrls = imageData.map(item => item.url)
         
         setImages(imageUrls)
         

@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { getDaysUntilChristmas, getCurrentUKTime } from '../utils/christmas';
+import React from 'react';
 import './ChristmasCountdown.css';
 
 interface ChristmasCountdownProps {
@@ -7,47 +6,14 @@ interface ChristmasCountdownProps {
 }
 
 const ChristmasCountdown: React.FC<ChristmasCountdownProps> = ({ className = '' }) => {
-  const [daysUntil, setDaysUntil] = useState<number>(0);
-  const [, setCurrentTime] = useState<Date>(new Date());
-
-  useEffect(() => {
-    // Update countdown immediately
-    const updateCountdown = () => {
-      const ukTime = getCurrentUKTime();
-      setCurrentTime(ukTime);
-      setDaysUntil(getDaysUntilChristmas(ukTime));
-    };
-
-    // Initial update
-    updateCountdown();
-
-    // Set up interval to update every minute
-    const interval = setInterval(updateCountdown, 60000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const formatDays = (days: number): string => {
-    if (days === 0) {
-      return "It's Christmas Day!";
-    } else if (days === 1) {
-      return "1 day until Christmas";
-    } else {
-      return `${days} days until Christmas`;
-    }
-  };
-
   return (
     <div className={`christmas-countdown ${className}`}>
       <div className="countdown-content">
-        <h2 className="countdown-title">🎄 Christmas Countdown 🎄</h2>
-        <div className="countdown-display">
-          <div className="days-number">{daysUntil}</div>
-          <div className="days-label">
-            {daysUntil === 1 ? 'Day' : 'Days'}
-          </div>
+        <h2 className="countdown-title">🎄 Merry Christmas! 🎄</h2>
+        <div className="present-display">
+          <div className="present-icon">🎁</div>
         </div>
-        <p className="countdown-message">{formatDays(daysUntil)}</p>
+        <p className="present-message">This is a present to be opened on Christmas Day!</p>
         <div className="christmas-decorations">
           <span className="decoration">🎅</span>
           <span className="decoration">🎁</span>

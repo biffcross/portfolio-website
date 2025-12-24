@@ -2,15 +2,16 @@
   "site": {
     "title": "Biff Cross Photography",
     "description": "Professional photography portfolio",
-    "instagram": "https://instagram.com/biffcross",
-    "domain": "https://biffcross.com"
+    "instagram": "https://www.instagram.com/biffxcross",
+    "domain": "https://biffcrossphotography.co.uk",
+    "email": "biffcross@hotmail.co.uk"
   },
   "categories": [
     {
       "id": "sports",
       "name": "Sports",
       "description": "Athletic and sports photography",
-      "images": ["Shoot_1_12.jpg", "Shoot_1_1.jpg"]
+      "images": []
     },
     {
       "id": "music",
@@ -37,28 +38,9 @@
       "images": []
     }
   ],
-  "images": {
-    "Shoot_1_12.jpg": {
-      "filename": "Shoot_1_12.jpg",
-      "caption": "Sample sports photography",
-      "category": "sports",
-      "order": 1,
-      "dimensions": {
-        "width": 1920,
-        "height": 1080
-      },
-      "uploadDate": "2024-12-10T10:00:00Z"
-    },
-    "Shoot_1_1.jpg": {
-      "filename": "Shoot_1_1.jpg",
-      "caption": "Sample sports photography",
-      "category": "sports",
-      "order": 2,
-      "dimensions": {
-        "width": 1920,
-        "height": 1080
-      },
-      "uploadDate": "2024-12-10T10:00:00Z"
-    }
+  "images": {},
+  "easterEggs": {
+    "fireworksEnabled": true,
+    "christmasOverride": true
   }
 }

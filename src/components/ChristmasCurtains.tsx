@@ -64,12 +64,6 @@ const ChristmasCurtains: React.FC<ChristmasCurtainsProps> = ({ isVisible }) => {
       {/* Content Area */}
       <div className="curtains-content">
         <div className="content-wrapper">
-          <h1 className="christmas-title">
-            🎄 Merry Christmas! 🎄
-          </h1>
-          <p className="christmas-message">
-            The portfolio will be revealed on Christmas Day!
-          </p>
           <ChristmasCountdown className="curtains-countdown" />
           <div className="christmas-scene">
             <div className="snow-container">

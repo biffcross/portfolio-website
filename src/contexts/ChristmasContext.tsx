@@ -5,6 +5,7 @@ import {
   isJanuary,
   ChristmasState 
 } from '../utils/christmas';
+import { loadPortfolioConfig } from '../utils/config';
 
 interface ChristmasContextType extends ChristmasState {
   shouldShowCurtains: boolean;
@@ -21,6 +22,32 @@ interface ChristmasProviderProps {
 export const ChristmasProvider: React.FC<ChristmasProviderProps> = ({ children }) => {
   const [christmasState, setChristmasState] = useState<ChristmasState>(() => getChristmasState());
   const [isManuallyHidden, setIsManuallyHidden] = useState(false);
+  const [christmasOverride, setChristmasOverride] = useState(false);
+
+  // Load easter egg configuration for Christmas override
+  useEffect(() => {
+    const loadEasterEggConfig = async () => {
+      try {
+        const config = await loadPortfolioConfig();
+        const newOverride = config.easterEggs?.christmasOverride || false;
+        setChristmasOverride(newOverride);
+      } catch (error) {
+        console.error('Failed to load easter egg configuration:', error);
+        setChristmasOverride(false);
+      }
+    };
+    
+    // Load immediately
+    loadEasterEggConfig();
+    
+    // Set up interval to reload configuration every 30 seconds
+    // This ensures the Christmas override setting is kept up to date
+    const configInterval = setInterval(loadEasterEggConfig, 30000);
+    
+    return () => {
+      clearInterval(configInterval);
+    };
+  }, []);
 
   useEffect(() => {
     const updateChristmasState = () => {
@@ -68,7 +95,8 @@ export const ChristmasProvider: React.FC<ChristmasProviderProps> = ({ children }
 
   const shouldShowCurtains = shouldShowChristmasCurtains(christmasState.currentUKTime) && 
                             !isManuallyHidden && 
-                            christmasState.isChristmasActive;
+                            christmasState.isChristmasActive &&
+                            !christmasOverride; // Hide curtains if override is enabled
 
   const contextValue: ChristmasContextType = {
     ...christmasState,

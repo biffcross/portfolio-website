@@ -66,11 +66,14 @@ src/
 
 ### Configuration
 
-The portfolio configuration is stored in `public/portfolio-config.json` and includes:
+The portfolio configuration is stored in Cloudflare R2 as `portfolio-config.json` and includes:
 
 - Site metadata (title, description, social links)
 - Category definitions
 - Image metadata and organization
+- Easter egg settings (fireworks, Christmas override)
+
+The configuration is managed entirely through the admin interface and automatically loaded from R2 storage. Local configuration files are excluded from the repository.
 
 ## Deployment
 

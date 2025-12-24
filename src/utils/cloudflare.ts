@@ -66,7 +66,8 @@ export const constructImageUrl = (filename: string): string => {
   const baseUrl = R2_BASE_URL.replace(/\/$/, '')
   const cleanFilename = filename.replace(/^\//, '')
   
-  return `${baseUrl}/${encodeURIComponent(cleanFilename)}`
+  // Images are stored in the 'images/' subdirectory in R2
+  return `${baseUrl}/images/${encodeURIComponent(cleanFilename)}`
 }
 
 /**
@@ -89,7 +90,18 @@ export const extractFilenameFromUrl = (url: string): string | null => {
   try {
     const urlObj = new URL(url)
     const pathname = urlObj.pathname
-    const filename = decodeURIComponent(pathname.split('/').pop() || '')
+    
+    // Handle images stored in 'images/' subdirectory
+    const pathParts = pathname.split('/')
+    let filename = ''
+    
+    if (pathParts.length >= 3 && pathParts[pathParts.length - 2] === 'images') {
+      // URL format: /images/filename.jpg
+      filename = decodeURIComponent(pathParts[pathParts.length - 1])
+    } else {
+      // Fallback: assume filename is the last part of the path
+      filename = decodeURIComponent(pathParts.pop() || '')
+    }
     
     return validateImageFilename(filename) ? filename : null
   } catch {

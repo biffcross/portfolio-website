@@ -1,0 +1,247 @@
+/* X-ray Mode Overlay */
+.xray-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  user-select: none;
+}
+
+/* X-ray Mode Indicator */
+.xray-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 255, 0, 0.1);
+  border: 2px solid #00ff00;
+  color: #00ff00;
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  font-size: 14px;
+  backdrop-filter: blur(5px);
+  animation: xrayPulse 2s ease-in-out infinite;
+  box-shadow: 
+    0 0 10px rgba(0, 255, 0, 0.3),
+    inset 0 0 10px rgba(0, 255, 0, 0.1);
+}
+
+.xray-icon {
+  font-size: 18px;
+  animation: xrayRotate 3s linear infinite;
+}
+
+.xray-text {
+  letter-spacing: 1px;
+}
+
+/* X-ray Mode Global Styles */
+body.xray-mode {
+  /* Invert colors for dark mode effect */
+  filter: invert(1) hue-rotate(180deg);
+  background: #000 !important;
+  transition: filter 0.5s ease-in-out;
+}
+
+/* Specific X-ray effects for images */
+body.xray-mode img {
+  /* X-ray filter effects */
+  filter: 
+    invert(1) 
+    hue-rotate(180deg) 
+    contrast(1.2) 
+    brightness(0.8) 
+    grayscale(0.3)
+    sepia(0.2);
+  
+  /* Add a subtle glow effect */
+  box-shadow: 
+    0 0 20px rgba(0, 255, 0, 0.2),
+    inset 0 0 20px rgba(0, 255, 0, 0.1);
+  
+  /* Smooth transition */
+  transition: all 0.5s ease-in-out;
+}
+
+/* X-ray effects for text elements */
+body.xray-mode h1,
+body.xray-mode h2,
+body.xray-mode h3,
+body.xray-mode h4,
+body.xray-mode h5,
+body.xray-mode h6 {
+  color: #00ff00 !important;
+  text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+  transition: all 0.5s ease-in-out;
+}
+
+/* X-ray effects for navigation and UI elements */
+body.xray-mode nav,
+body.xray-mode header,
+body.xray-mode .header {
+  background: rgba(0, 0, 0, 0.8) !important;
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  backdrop-filter: blur(10px);
+  transition: all 0.5s ease-in-out;
+}
+
+/* X-ray effects for links */
+body.xray-mode a {
+  color: #00ffff !important;
+  text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+  transition: all 0.3s ease-in-out;
+}
+
+body.xray-mode a:hover {
+  color: #ffffff !important;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+}
+
+/* X-ray effects for buttons */
+body.xray-mode button {
+  background: rgba(0, 255, 0, 0.1) !important;
+  border: 1px solid #00ff00 !important;
+  color: #00ff00 !important;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+  transition: all 0.3s ease-in-out;
+}
+
+body.xray-mode button:hover {
+  background: rgba(0, 255, 0, 0.2) !important;
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+  transform: scale(1.05);
+}
+
+/* X-ray effects for gallery containers */
+body.xray-mode .gallery,
+body.xray-mode .image-grid {
+  background: rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid rgba(0, 255, 0, 0.2);
+  backdrop-filter: blur(5px);
+  transition: all 0.5s ease-in-out;
+}
+
+/* X-ray scanning line effect */
+body.xray-mode::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #00ff00,
+    transparent
+  );
+  animation: xrayScan 3s linear infinite;
+  z-index: 10000;
+  pointer-events: none;
+}
+
+/* Matrix-like digital rain effect */
+body.xray-mode::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(circle at 20% 20%, rgba(0, 255, 0, 0.1) 1px, transparent 1px),
+    radial-gradient(circle at 80% 80%, rgba(0, 255, 0, 0.1) 1px, transparent 1px),
+    radial-gradient(circle at 40% 60%, rgba(0, 255, 0, 0.05) 1px, transparent 1px);
+  background-size: 50px 50px, 30px 30px, 70px 70px;
+  animation: matrixRain 10s linear infinite;
+  z-index: 9997;
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+/* Animations */
+@keyframes xrayPulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes xrayRotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes xrayScan {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes matrixRain {
+  0% {
+    background-position: 0% 0%, 0% 0%, 0% 0%;
+  }
+  100% {
+    background-position: 0% 100%, 100% 100%, 50% 100%;
+  }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .xray-indicator {
+    top: 10px;
+    right: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  
+  .xray-icon {
+    font-size: 16px;
+  }
+}
+
+/* Accessibility: Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .xray-indicator,
+  .xray-icon,
+  body.xray-mode::before,
+  body.xray-mode::after {
+    animation: none;
+  }
+  
+  body.xray-mode img,
+  body.xray-mode h1,
+  body.xray-mode h2,
+  body.xray-mode h3,
+  body.xray-mode h4,
+  body.xray-mode h5,
+  body.xray-mode h6,
+  body.xray-mode nav,
+  body.xray-mode header,
+  body.xray-mode .header,
+  body.xray-mode a,
+  body.xray-mode button,
+  body.xray-mode .gallery,
+  body.xray-mode .image-grid {
+    transition: none;
+  }
+}

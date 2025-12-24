@@ -1,0 +1,161 @@
+.category-tags {
+  margin: 0.5rem 0;
+}
+
+.category-tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.category-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: #007bff;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  animation: tagSlideIn 0.2s ease-out;
+}
+
+.category-tag.uncategorized {
+  background: #6c757d;
+}
+
+.category-tag-remove {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: bold;
+  padding: 0;
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.category-tag-remove:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.category-add-container {
+  position: relative;
+}
+
+.category-add-button {
+  background: transparent;
+  color: #28a745;
+  border: 2px solid #28a745;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  transition: all 0.2s ease;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.category-add-button:hover {
+  background: #28a745;
+  color: white;
+  transform: scale(1.1);
+}
+
+.category-add-menu {
+  position: absolute;
+  left: 0;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  min-width: 150px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.category-add-menu.menu-up {
+  bottom: 100%;
+  margin-bottom: 0.25rem;
+  animation: menuSlideUp 0.2s ease-out;
+}
+
+.category-add-menu.menu-down {
+  top: 100%;
+  margin-top: 0.25rem;
+  animation: menuSlideDown 0.2s ease-out;
+}
+
+.category-add-option {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease;
+}
+
+.category-add-option:hover {
+  background: #f8f9fa;
+}
+
+.category-add-empty {
+  padding: 0.5rem 0.75rem;
+  color: #6c757d;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+@keyframes tagSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes menuSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes menuSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
