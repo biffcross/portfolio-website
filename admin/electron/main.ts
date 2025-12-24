@@ -34,8 +34,7 @@ const createWindow = (): void => {
   // Load the app
   if (isDev) {
     mainWindow.loadURL('http://localhost:8080');
-    // Open DevTools in development
-    mainWindow.webContents.openDevTools();
+    // DevTools can be opened manually via View menu or Cmd+Option+I / F12
   } else {
     mainWindow.loadFile(join(__dirname, '../dist/index.html'));
   }
