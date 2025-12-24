@@ -51,6 +51,7 @@ const missingVars = requiredVars.filter(varName => {
   }
   // Set the environment variable for the build process
   process.env[varName] = value;
+  console.log(`✓ ${varName}: ${value.substring(0, 10)}...`);
   return false;
 });
 
