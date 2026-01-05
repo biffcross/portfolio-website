@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import ProtectedImage from './ProtectedImage'
 import Lightbox from './Lightbox'
-import { constructImageUrl } from '../utils/cloudflare'
 
 interface GalleryProps {
   images: string[]

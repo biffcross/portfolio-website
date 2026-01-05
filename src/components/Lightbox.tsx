@@ -1,5 +1,4 @@
 import { useEffect, useCallback, useState } from 'react'
-import ProtectedImage from './ProtectedImage'
 
 interface LightboxProps {
   images: string[]
