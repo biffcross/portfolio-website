@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Gallery from '../components/Gallery'
+import LoadingSpinner from '../components/LoadingSpinner'
 import { loadPortfolioConfig } from '../utils/config'
 import { constructImageUrl } from '../utils/cloudflare'
 
@@ -73,7 +74,7 @@ const Home = () => {
   if (loading) {
     return (
       <div className="home-page">
-        <div className="loading-message">Loading...</div>
+        <LoadingSpinner message="Loading portfolio..." />
       </div>
     )
   }

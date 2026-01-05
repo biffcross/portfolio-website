@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Gallery from '../components/Gallery'
+import LoadingSpinner from '../components/LoadingSpinner'
 import { loadPortfolioConfig, CategoryConfig } from '../utils/config'
 import { constructImageUrl } from '../utils/cloudflare'
 
@@ -74,7 +75,7 @@ const Category = ({ category }: CategoryProps) => {
   if (loading) {
     return (
       <div className="category-page">
-        <div className="loading">Loading {category}...</div>
+        <LoadingSpinner message={`Loading ${category}...`} />
       </div>
     )
   }

@@ -71,6 +71,7 @@ const ImageGrid = ({
               src={image}
               alt={`Image ${index + 1}`}
               className="image-grid__image"
+              showSkeleton={true}
             />
           </div>
         ))}

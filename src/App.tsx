@@ -5,6 +5,7 @@ import Home from './pages/Home'
 import About from './pages/About'
 import Contact from './pages/Contact'
 import Category from './pages/Category'
+import LoadingSpinner from './components/LoadingSpinner'
 import ChristmasCurtains from './components/ChristmasCurtains'
 import XrayMode from './components/XrayMode'
 import FireworksEffect from './components/FireworksEffect'
@@ -48,7 +49,7 @@ function AppContent() {
   if (loading) {
     return (
       <div className="App">
-        <div className="loading">Loading application...</div>
+        <LoadingSpinner size="large" message="Loading application..." />
       </div>
     )
   }

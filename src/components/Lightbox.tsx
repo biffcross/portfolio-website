@@ -110,10 +110,18 @@ const Lightbox = ({ images, currentIndex, isOpen, onClose, onNext, onPrevious }:
 
         {/* Main image */}
         <div className="lightbox-image-container">
-          <ProtectedImage
+          <img
             src={currentImage}
             alt={`Image ${currentIndex + 1} of ${images.length}`}
             className="lightbox-image"
+            style={{
+              userSelect: 'none',
+              pointerEvents: 'auto',
+              outline: 'none'
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+            onDragStart={(e) => e.preventDefault()}
+            draggable={false}
           />
         </div>
 
@@ -130,13 +138,6 @@ const Lightbox = ({ images, currentIndex, isOpen, onClose, onNext, onPrevious }:
         {/* Image counter */}
         <div className="lightbox-counter">
           {currentIndex + 1} / {images.length}
-        </div>
-
-        {/* Mobile touch indicators */}
-        <div className="lightbox-touch-hint">
-          <span className="lightbox-touch-hint__text">
-            Swipe left/right to navigate • Tap to close
-          </span>
         </div>
       </div>
     </div>

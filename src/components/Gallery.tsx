@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import ProtectedImage from './ProtectedImage'
 import Lightbox from './Lightbox'
+import { constructImageUrl } from '../utils/cloudflare'
 
 interface GalleryProps {
   images: string[]
@@ -63,6 +64,7 @@ const Gallery = ({ images, category, onImageClick, maxHeight = 500 }: GalleryPro
                 src={image}
                 alt={`${category || 'Featured'} ${index + 1}`}
                 className="gallery__image"
+                showSkeleton={true}
               />
             </div>
           ))}
