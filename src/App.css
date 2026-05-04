@@ -587,6 +587,36 @@ main {
   text-align: center;
 }
 
+.about-container {
+  display: flex;
+  gap: 2rem;
+  align-items: stretch;
+}
+
+.about-image {
+  flex-shrink: 0;
+  width: 250px;
+  display: flex;
+}
+
+.about-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.about-text {
+  flex: 1;
+  line-height: 1.8;
+}
+
+.about-text p {
+  color: #333;
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+}
+
 .about-content {
   line-height: 1.8;
 }
@@ -950,6 +980,17 @@ main {
   .about-page h1,
   .contact-page h1 {
     font-size: 1.5rem;
+  }
+
+  .about-container {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .about-image {
+    width: 100%;
+    max-width: 300px;
+    margin: 0 auto;
   }
 
   .lightbox-close {

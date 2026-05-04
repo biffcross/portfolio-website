@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <script>
+    // GitHub Pages SPA redirect script
+    // This script captures the current path and redirects to index.html
+    // preserving the route information for React Router to handle
+    
+    (function() {
+      var redirect = sessionStorage.redirect;
+      delete sessionStorage.redirect;
+      
+      if (redirect && redirect !== location.href) {
+        history.replaceState(null, null, redirect);
+      } else {
+        // Store the current path for the redirect handler in index.html
+        var path = window.location.pathname;
+        var search = window.location.search;
+        var hash = window.location.hash;
+        
+        // Construct the full path with query params and hash
+        var fullPath = path + search + hash;
+        
+        // Store in sessionStorage for index.html to pick up
+        sessionStorage.setItem('redirect', fullPath);
+        
+        // Redirect to index.html (or root for custom domain)
+        window.location.replace('/');
+      }
+    })();
+  </script>
+</head>
+<body>
+  <!-- This page is used for GitHub Pages SPA routing -->
+</body>
+</html>

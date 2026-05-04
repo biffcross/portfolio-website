@@ -5,8 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Biff Cross Photography</title>
-    <script type="module" crossorigin src="/assets/index-BBhlQa_e.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BBm8Dro0.css">
+    
+    <!-- GitHub Pages SPA redirect handler -->
+    <!-- This script must run before React Router initializes -->
+    <script>
+      (function() {
+        var redirect = sessionStorage.getItem('redirect');
+        if (redirect) {
+          // Clear the redirect flag
+          sessionStorage.removeItem('redirect');
+          // Restore the correct URL using history.replaceState
+          history.replaceState(null, null, redirect);
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-Bvyzkx4s.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-By_0Ynrd.css">
   </head>
   <body>
     <div id="root"></div>

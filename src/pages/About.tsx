@@ -1,38 +1,38 @@
+import BiffImage from '../Biff.jpeg'
+
 const About = () => {
   return (
     <div className="about-page">
       <h1>About Biff Cross</h1>
-      <div className="about-content">
-        <p>
-          Welcome to my photography portfolio. I'm Biff Cross, a professional photographer 
-          with a passion for capturing life's most dynamic and meaningful moments.
-        </p>
-        
-        <p>
-          My work spans across multiple disciplines including sports photography, where I 
-          capture the intensity and emotion of athletic competition; music photography, 
-          documenting the energy and artistry of live performances; and portraiture, 
-          revealing the unique character and personality of my subjects.
-        </p>
-        
-        <p>
-          I also have a deep appreciation for analogue photography, working with film to 
-          create images with a timeless quality and distinctive aesthetic. My editorial 
-          work tells stories through carefully composed images that communicate ideas 
-          and emotions with clarity and impact.
-        </p>
-        
-        <p>
-          Each photograph is an opportunity to freeze a moment in time, to tell a story, 
-          and to connect with viewers on an emotional level. Whether I'm on the sidelines 
-          of a championship game, in the pit at a concert, or in the studio with a portrait 
-          subject, my goal is always the same: to create images that resonate and endure.
-        </p>
-        
-        <p>
-          Thank you for taking the time to explore my work. I hope these images inspire 
-          you as much as they inspired me to capture them.
-        </p>
+      <div className="about-container">
+        <div className="about-image">
+          <img src={BiffImage} alt="Biff Cross" />
+        </div>
+        <div className="about-text">
+          <p>
+            I am a photographer, from Norwich, England. My Current practice is engaged in 
+            extreme sports such as freestyle skiing, snowboarding, Climbing and skateboarding.
+          </p>
+          
+          <p>
+            My main influences come from the works of early skateboarding photographers such 
+            as J. Grant Brittain and Attiba Jefferson. I aim to bring the visual style of 
+            skateboarding into other extreme sports, through the use of similar visual 
+            techniques, and documenting the strong culture around these sports.
+          </p>
+          
+          <p>
+            My body of work focuses on the movement, determination and skills of top athletes 
+            in their field through both stills and moving image.
+          </p>
+          
+          <p>
+            After photographing the LAAX open freeski world cup, and Shaun Whites 'The Snow 
+            League' Final. I am now looking to bring my expertise in action sports into the 
+            advertising world, and work with brands on creative advertising within the sports 
+            industry.
+          </p>
+        </div>
       </div>
     </div>
   )
