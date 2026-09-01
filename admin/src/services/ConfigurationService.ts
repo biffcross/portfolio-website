@@ -21,6 +21,7 @@ export interface ImageMetadata {
   categories: string[];
   order: number;
   categoryOrders?: Record<string, number>; // Per-category ordering
+  featuredOrder?: number; // Ordering within the featured (home page) gallery
   dimensions: { width: number; height: number };
   uploadDate: string;
   is_featured: boolean;

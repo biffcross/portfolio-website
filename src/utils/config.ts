@@ -21,6 +21,7 @@ export interface ImageConfig {
   categories: string[]
   order: number
   categoryOrders?: Record<string, number> // Per-category ordering
+  featuredOrder?: number // Ordering within the featured (home page) gallery
   uploadDate: string
   is_featured: boolean
   // Legacy support for migration

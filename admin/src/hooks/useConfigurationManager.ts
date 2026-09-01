@@ -22,6 +22,7 @@ export interface PortfolioConfig {
     categories: string[];
     order: number;
     categoryOrders?: Record<string, number>; // Per-category ordering
+    featuredOrder?: number; // Ordering within the featured (home page) gallery
     uploadDate: string;
     dimensions?: { width: number; height: number };
     is_featured: boolean;

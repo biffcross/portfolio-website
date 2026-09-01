@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import FileUploader from '../components/FileUploader'
 import CategoryTags from '../components/CategoryTags'
 import { useConfigurationManager } from '../hooks/useConfigurationManager'
+import type { PortfolioConfig } from '../hooks/useConfigurationManager'
 import { useElectronR2 } from '../hooks/useElectronR2'
 import type { UploadResult } from '../services/r2Service'
 
@@ -20,6 +21,7 @@ interface ImageWithMetadata {
   categories: string[]
   order: number
   categoryOrders?: Record<string, number>
+  featuredOrder?: number
   uploadDate: string
   is_featured: boolean
   // Legacy support for migration
@@ -36,6 +38,9 @@ function ImageLibrary() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+  const [draggedImage, setDraggedImage] = useState<string | null>(null)
+  const [dragOverImage, setDragOverImage] = useState<string | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
   
   const {
     config,
@@ -54,6 +59,35 @@ function ImageLibrary() {
     }
     // Fallback to global order for legacy images
     return image.order
+  }
+
+  // Helper function to get the featured-gallery order (home page ordering).
+  // `featuredOrder` is a newer field, so existing configs won't have it yet;
+  // fall back to the global order, and treat anything non-numeric as last.
+  const getFeaturedOrder = (image: ImageWithMetadata): number => {
+    if (typeof image.featuredOrder === 'number' && Number.isFinite(image.featuredOrder)) {
+      return image.featuredOrder
+    }
+    if (typeof image.order === 'number' && Number.isFinite(image.order)) {
+      return image.order
+    }
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  // Next slot at the end of the featured gallery. Works on configs where no image
+  // has a featuredOrder yet by falling back to global order values.
+  const getNextFeaturedOrder = (images: PortfolioConfig['images']): number => {
+    const existingOrders = Object.values(images)
+      .filter(img => img.is_featured)
+      .map(img =>
+        typeof img.featuredOrder === 'number' && Number.isFinite(img.featuredOrder)
+          ? img.featuredOrder
+          : img.order
+      )
+      .filter(value => typeof value === 'number' && Number.isFinite(value))
+
+    if (existingOrders.length === 0) return 0
+    return Math.max(...existingOrders) + 1
   }
 
   // Helper function to get images sorted by category order
@@ -91,6 +125,7 @@ function ImageLibrary() {
       categories: metadata.categories || (metadata.category ? [metadata.category] : []),
       order: metadata.order,
       categoryOrders: metadata.categoryOrders,
+      featuredOrder: metadata.featuredOrder,
       uploadDate: metadata.uploadDate,
       is_featured: metadata.is_featured || false,
       // Keep legacy category for backward compatibility during transition
@@ -103,7 +138,7 @@ function ImageLibrary() {
     : selectedCategory === 'featured'
     ? allImages
         .filter(img => img.is_featured)
-        .sort((a, b) => a.order - b.order) // Global order for featured images
+        .sort((a, b) => getFeaturedOrder(a) - getFeaturedOrder(b)) // Home page featured order
     : selectedCategory === 'uncategorized'
     ? allImages
         .filter(img => img.categories.length === 0 || (img.categories.length === 1 && img.categories[0] === 'uncategorized'))
@@ -209,13 +244,25 @@ function ImageLibrary() {
   const handleFeaturedToggle = (imageFilename: string, is_featured: boolean) => {
     if (!config) return
 
-    // Update image featured status
+    const existing = config.images[imageFilename]
+    if (!existing) return
+
+    const updatedImage = { ...existing, is_featured }
+
+    if (is_featured) {
+      // Give newly featured images an explicit slot at the end of the home page
+      // gallery so ordering is deterministic even before anything is dragged.
+      if (typeof updatedImage.featuredOrder !== 'number') {
+        updatedImage.featuredOrder = getNextFeaturedOrder(config.images)
+      }
+    } else {
+      // Drop the slot so a stale value can't collide if it's re-featured later.
+      delete updatedImage.featuredOrder
+    }
+
     const updatedImages = {
       ...config.images,
-      [imageFilename]: {
-        ...config.images[imageFilename],
-        is_featured
-      }
+      [imageFilename]: updatedImage
     }
 
     updateConfig({
@@ -230,13 +277,26 @@ function ImageLibrary() {
     if (!config || selectedImages.size === 0) return
 
     const updatedImages = { ...config.images }
+    let nextFeaturedOrder = getNextFeaturedOrder(config.images)
 
     // Update each selected image
     selectedImages.forEach(imageFilename => {
-      updatedImages[imageFilename] = {
-        ...updatedImages[imageFilename],
-        is_featured
+      const existing = updatedImages[imageFilename]
+      if (!existing) return
+
+      const updatedImage = { ...existing, is_featured }
+
+      if (is_featured) {
+        // Append each newly featured image, keeping their relative order stable.
+        if (typeof updatedImage.featuredOrder !== 'number') {
+          updatedImage.featuredOrder = nextFeaturedOrder
+          nextFeaturedOrder += 1
+        }
+      } else {
+        delete updatedImage.featuredOrder
       }
+
+      updatedImages[imageFilename] = updatedImage
     })
 
     updateConfig({
@@ -384,6 +444,164 @@ function ImageLibrary() {
     updateConfig({ images: updatedImages })
     setHasUnsavedChanges(true)
   }
+
+  // Drag-and-drop reordering. Moves `sourceFilename` to the position of
+  // `targetFilename` within the currently visible (filtered + sorted) list,
+  // then rewrites order values to match the new sequence.
+  const handleReorder = (sourceFilename: string, targetFilename: string) => {
+    if (!config || sourceFilename === targetFilename) return
+
+    // Work off the currently visible order so the result matches what the user sees.
+    const visible = filteredImages.map(img => img.filename)
+    const fromIndex = visible.indexOf(sourceFilename)
+    const toIndex = visible.indexOf(targetFilename)
+    if (fromIndex === -1 || toIndex === -1) return
+
+    // Reorder the filename list: remove the dragged item and insert it at the target.
+    const reordered = [...visible]
+    reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, sourceFilename)
+
+    const updatedImages = { ...config.images }
+
+    if (selectedCategory === 'featured') {
+      // The Featured view drives the home page gallery, which reads `featuredOrder`.
+      // Every featured image is visible here, so a straight re-index is safe.
+      reordered.forEach((filename, index) => {
+        const existing = updatedImages[filename]
+        if (!existing) return
+        updatedImages[filename] = { ...existing, featuredOrder: index }
+      })
+    } else if (selectedCategory === 'all') {
+      // 'all' shows every image, so re-indexing the global order is safe.
+      reordered.forEach((filename, index) => {
+        const existing = updatedImages[filename]
+        if (!existing) return
+        updatedImages[filename] = { ...existing, order: index }
+      })
+    } else if (selectedCategory === 'uncategorized') {
+      // This view is only a subset of all images, so re-indexing from 0 would
+      // collide with the global order of images that aren't on screen. Instead
+      // reuse the order values these images already hold and redistribute them
+      // in the new sequence, preserving their positions relative to everything else.
+      const slots = reordered
+        .map(filename => config.images[filename]?.order ?? 0)
+        .sort((a, b) => a - b)
+
+      reordered.forEach((filename, index) => {
+        const existing = updatedImages[filename]
+        if (!existing) return
+        updatedImages[filename] = { ...existing, order: slots[index] }
+      })
+    } else {
+      // A specific category: persist per-category ordering.
+      reordered.forEach((filename, index) => {
+        const existing = updatedImages[filename]
+        if (!existing) return
+        const categoryOrders = existing.categoryOrders ? { ...existing.categoryOrders } : {}
+        categoryOrders[selectedCategory] = index
+        updatedImages[filename] = { ...existing, categoryOrders }
+      })
+    }
+
+    updateConfig({ images: updatedImages })
+    setHasUnsavedChanges(true)
+  }
+
+  const handleDragStart = (filename: string) => {
+    setDraggedImage(filename)
+  }
+
+  const handleDragOver = (e: React.DragEvent, filename: string) => {
+    // Allow dropping and show where the item will land.
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (filename !== dragOverImage) {
+      setDragOverImage(filename)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent, targetFilename: string) => {
+    e.preventDefault()
+    if (draggedImage) {
+      handleReorder(draggedImage, targetFilename)
+    }
+    setDraggedImage(null)
+    setDragOverImage(null)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedImage(null)
+    setDragOverImage(null)
+  }
+
+  // Auto-scroll while dragging near the top/bottom edge of the viewport.
+  // HTML5 drag-and-drop doesn't scroll on its own, so we track the pointer
+  // during `dragover` and nudge the scroll container on each animation frame.
+  useEffect(() => {
+    if (!draggedImage) return
+
+    const EDGE_ZONE = 130      // px from the edge where scrolling kicks in
+    const MAX_SPEED = 14       // px per frame at the very edge
+    const MIN_SPEED = 2        // px per frame at the outer edge of the zone
+
+    // Find the nearest scrollable ancestor; fall back to the document.
+    const findScroller = (start: HTMLElement | null): HTMLElement => {
+      let node = start
+      while (node && node !== document.body) {
+        const style = window.getComputedStyle(node)
+        const canScrollY = /(auto|scroll|overlay)/.test(style.overflowY)
+        if (canScrollY && node.scrollHeight > node.clientHeight) {
+          return node
+        }
+        node = node.parentElement
+      }
+      return (document.scrollingElement as HTMLElement) || document.documentElement
+    }
+
+    const scroller = findScroller(gridRef.current)
+
+    let rafId: number | null = null
+    let pointerY = 0
+    let running = false
+
+    const step = () => {
+      const viewportTop = 0
+      const viewportBottom = window.innerHeight
+      let delta = 0
+
+      if (pointerY - viewportTop < EDGE_ZONE) {
+        // Closer to the edge = faster scroll.
+        const intensity = Math.min(1, (EDGE_ZONE - (pointerY - viewportTop)) / EDGE_ZONE)
+        delta = -(MIN_SPEED + intensity * (MAX_SPEED - MIN_SPEED))
+      } else if (viewportBottom - pointerY < EDGE_ZONE) {
+        const intensity = Math.min(1, (EDGE_ZONE - (viewportBottom - pointerY)) / EDGE_ZONE)
+        delta = MIN_SPEED + intensity * (MAX_SPEED - MIN_SPEED)
+      }
+
+      if (delta !== 0) {
+        // Assigning scrollTop clamps automatically at both ends.
+        scroller.scrollTop += delta
+      }
+
+      rafId = requestAnimationFrame(step)
+    }
+
+    const handleDocumentDragOver = (e: DragEvent) => {
+      pointerY = e.clientY
+      if (!running) {
+        running = true
+        rafId = requestAnimationFrame(step)
+      }
+    }
+
+    document.addEventListener('dragover', handleDocumentDragOver)
+
+    return () => {
+      document.removeEventListener('dragover', handleDocumentDragOver)
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
+  }, [draggedImage])
 
   const handleSaveChanges = async () => {
     if (!config || !hasUnsavedChanges) return
@@ -840,18 +1058,32 @@ function ImageLibrary() {
           
           {filteredImages.length > 0 ? (
             <>
-              <div className="grid grid-3" style={{ gap: '2rem' }}>
+              <div className="grid grid-3" ref={gridRef} style={{ gap: '2rem' }}>
                 {filteredImages.map((image) => {
                   const isSelected = selectedImages.has(image.filename)
                   
+                  const isDragging = draggedImage === image.filename
+                  const isDragOver = dragOverImage === image.filename && draggedImage !== image.filename
+
                   return (
                     <div 
                       key={image.filename} 
-                      className="image-card" 
+                      className="image-card"
+                      draggable
+                      onDragStart={() => handleDragStart(image.filename)}
+                      onDragOver={(e) => handleDragOver(e, image.filename)}
+                      onDrop={(e) => handleDrop(e, image.filename)}
+                      onDragEnd={handleDragEnd}
                       style={{
-                        border: `2px solid ${isSelected ? '#28a745' : '#e0e0e0'}`,
+                        border: `2px solid ${
+                          isDragOver ? '#007bff' : isSelected ? '#28a745' : '#e0e0e0'
+                        }`,
                         borderRadius: '8px',
                         overflow: 'hidden',
+                        cursor: 'grab',
+                        opacity: isDragging ? 0.4 : 1,
+                        boxShadow: isDragOver ? '0 0 0 3px rgba(0,123,255,0.25)' : 'none',
+                        transform: isDragOver ? 'scale(1.02)' : 'none',
                         background: '#fff',
                         transition: 'all 0.2s ease'
                       }}
@@ -860,12 +1092,32 @@ function ImageLibrary() {
                         <img 
                           src={image.url} 
                           alt={image.filename}
+                          draggable={false}
                           style={{
                             width: '100%',
                             height: '200px',
-                            objectFit: 'cover'
+                            objectFit: 'cover',
+                            pointerEvents: 'none'
                           }}
                         />
+                        {/* Drag handle hint */}
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '0.5rem',
+                          left: '0.5rem',
+                          background: 'rgba(0, 0, 0, 0.55)',
+                          color: '#fff',
+                          borderRadius: '4px',
+                          padding: '0.15rem 0.45rem',
+                          fontSize: '0.7rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          pointerEvents: 'none'
+                        }}>
+                          <span style={{ fontSize: '0.85rem', lineHeight: 1 }}>⠿</span>
+                          Drag to reorder
+                        </div>
                         {/* Selection checkbox */}
                         <div style={{
                           position: 'absolute',
@@ -935,7 +1187,9 @@ function ImageLibrary() {
                                 Uploaded: {new Date(image.uploadDate).toLocaleDateString()}
                               </div>
                               <div style={{ fontSize: '0.8rem', color: '#999', marginTop: '0.25rem' }}>
-                                {selectedCategory !== 'all' && selectedCategory !== 'uncategorized' ? (
+                                {selectedCategory === 'featured' ? (
+                                  <>Order on Home Page: {getFeaturedOrder(image)}</>
+                                ) : selectedCategory !== 'all' && selectedCategory !== 'uncategorized' ? (
                                   <>Order in {config?.categories.find(cat => cat.id === selectedCategory)?.name}: {getCategoryOrder(image, selectedCategory)}</>
                                 ) : (
                                   <>Global Order: {image.order}</>

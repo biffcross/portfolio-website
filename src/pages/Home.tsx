@@ -2,7 +2,24 @@ import { useState, useEffect } from 'react'
 import Gallery from '../components/Gallery'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { loadPortfolioConfig } from '../utils/config'
+import type { ImageConfig } from '../utils/config'
 import { constructImageUrl } from '../utils/cloudflare'
+
+// Rank used to order the featured (home page) gallery. Prefers the
+// admin-managed `featuredOrder`, falls back to the global `order` for configs
+// saved before that field existed, and sorts anything non-numeric to the end
+// rather than producing NaN comparisons.
+const getFeaturedRank = (imageConfig: ImageConfig): number => {
+  const { featuredOrder, order } = imageConfig
+
+  if (typeof featuredOrder === 'number' && Number.isFinite(featuredOrder)) {
+    return featuredOrder
+  }
+  if (typeof order === 'number' && Number.isFinite(order)) {
+    return order
+  }
+  return Number.MAX_SAFE_INTEGER
+}
 
 const Home = () => {
   const [featuredImages, setFeaturedImages] = useState<string[]>([])
@@ -17,13 +34,12 @@ const Home = () => {
         
         const portfolioConfig = await loadPortfolioConfig()
         
-        // Get images marked as featured
-        const featured: string[] = []
-        Object.values(portfolioConfig.images).forEach(imageConfig => {
-          if (imageConfig.is_featured) {
-            featured.push(constructImageUrl(imageConfig.filename))
-          }
-        })
+        // Get images marked as featured, ordered by the sequence set in the
+        // admin app's Featured view.
+        const featured: string[] = Object.values(portfolioConfig.images)
+          .filter(imageConfig => imageConfig.is_featured)
+          .sort((a, b) => getFeaturedRank(a) - getFeaturedRank(b))
+          .map(imageConfig => constructImageUrl(imageConfig.filename))
         
         // If no images are marked as featured, fall back to first few images from categories
         if (featured.length === 0) {
